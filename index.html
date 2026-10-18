@@ -125,6 +125,17 @@ input.wrong { border-color: var(--bad); background: var(--bad-bg); }
 .trow .n { font-variant-numeric: tabular-nums; color: var(--muted); }
 .errs { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 16px; }
 .errs s { color: var(--bad); }
+.rec { margin: 0; color: var(--muted); }
+.rec b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.rec.win { color: var(--fg); font-weight: 800; font-size: 18px; }
+.rec .star { color: var(--gold); }
+.pieges { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.pieges li { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 10px; align-items: center; }
+.pieges li > .small { grid-column: 2 / -1; }
+.pips { display: flex; gap: 4px; }
+.pips i { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--accent); box-sizing: border-box; }
+.pips i.on { background: var(--accent); }
+.fb .pg { display: block; margin-top: 6px; font-size: 15px; font-weight: 700; }
 .errs b { color: var(--ok); }
 details > summary { cursor: pointer; font-family: var(--display); font-weight: 600; font-size: 18px; }
 .sent { font-weight: 700; margin: 0; }
@@ -254,6 +265,7 @@ function home() {
       : `<p class="empty">Rien à faire aujourd'hui. Bravo !</p>`}
     ${todo.length ? `<section class="list"><h2>Quiz à faire</h2>${todo.slice(0, 2).map(quizRow).join("")}
       ${todo.length > 2 ? `<p class="small">+ ${todo.length - 2} autre${todo.length > 3 ? "s" : ""} dans Mes matières</p>` : ""}</section>` : ""}
+    ${piegesCard()}
     <button class="main" data-go="scan">Scanner un document</button>
     <section class="list"><h2>Mes matières</h2><div class="tiles">${DATA.subjects.map(s => `
       <button class="tile" data-m="${s.key}" data-go="m-${s.key}"><b>${esc(s.name)}</b>
@@ -264,6 +276,19 @@ function home() {
     <div class="tiles"><button class="sec" data-go="agenda">Mon agenda</button><button class="sec" data-go="progres">Mes progrès</button></div>
     <p class="small">Mis à jour le ${esc(DATA.updated)}.</p>`;
   wire(); wireAgenda(home);
+}
+
+// Traps = her recurring mistakes, listed by the cloud job; one goes out after piegeWin right answers in a row.
+const WIN = () => DATA.piegeWin || 3;
+const activePieges = () => (DATA.pieges || []).filter(p => !p.done && SUBJ[p.m]);
+const pips = p => `<span class="pips" aria-label="${p.streak || 0} sur ${WIN()}">${Array.from({ length: WIN() }, (_, k) => `<i class="${k < (p.streak || 0) ? "on" : ""}"></i>`).join("")}</span>`;
+const piegeRow = p => `<li data-m="${p.m}"><span class="dot"></span><b>${esc(p.titre)}</b>${p.done ? `<span class="badge good">éteint ✓</span>` : pips(p)}<span class="small">${esc(p.regle)}</span></li>`;
+function piegesCard() {
+  const act = activePieges(), off = (DATA.pieges || []).filter(p => p.done).length;
+  if (!act.length && !off) return "";
+  return `<section class="card"><h2>Mes pièges</h2>
+    ${act.length ? `<ul class="pieges">${act.slice(0, 6).map(piegeRow).join("")}</ul>` : `<p class="empty">Aucun piège en cours. Bravo !</p>`}
+    <p class="small">${WIN()} réussites de suite éteignent un piège.${off ? ` Éteint${off > 1 ? "s" : ""} : ${off}.` : ""}</p></section>`;
 }
 
 function quizRow(q) {
@@ -541,17 +566,40 @@ function quizIntro(quiz) {
   setFrame(quiz.title, quiz.subject.key, true);
   const themes = [...new Set(quiz.questions.map(q => q.t))];
   count.textContent = quiz.questions.length + " questions";
+  const total = quiz.questions.length, best = quiz.score ? null : bestPct(quiz.subject, quiz.id);
+  const traps = new Set(quiz.questions.map(q => q.p).filter(id => activePieges().some(p => p.id === id))).size;
   app.innerHTML = `<section class="card">
     <p style="margin:0">${esc(quiz.intro || "")}</p>
     <ul class="muted" style="margin:0;padding-left:20px">${themes.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
-    <p class="small">Après chaque réponse, tu vois la correction. Ton résultat est enregistré tout seul à la fin.</p>
+    ${best !== null ? `<p class="rec">Ton record en ${esc(quiz.subject.name)} : <b>${Math.round(best * total)}/${total}</b>. À toi de le battre !</p>` : ""}
+    ${traps ? `<p class="rec">Ce quiz contient <b>${traps}</b> de tes pièges.</p>` : ""}
+    <p class="small">Après chaque réponse, tu vois la correction. À la fin, tes erreurs reviennent pour une deuxième chance.</p>
     <button class="main" id="go">Commencer</button></section>`;
-  document.getElementById("go").onclick = () => { Z = { quiz, i: 0, answers: [] }; show(); };
+  document.getElementById("go").onclick = () => { Z = { quiz, qs: quiz.questions, i: 0, answers: [] }; show(); };
+}
+// Her best first-try score in the subject, as a share (redone quizzes never count).
+function bestPct(s, except) {
+  const xs = Object.values(QUIZ).filter(q => q.subject.key === s.key && q.id !== except && q.score && q.score[1]).map(q => q.score[0] / q.score[1]);
+  return xs.length ? Math.max(...xs) : null;
+}
+function shuffle(xs) {
+  for (let k = xs.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [xs[k], xs[j]] = [xs[j], xs[k]]; }
+  return xs;
+}
+// Second-chance copy of a missed question: its `alt` wording when it has one, choices reshuffled.
+function variant(q, useAlt) {
+  const v = { ...q, ...(useAlt && q.alt ? q.alt : {}), base: q, usedAlt: !!(useAlt && q.alt) };
+  if (v.type === "qcm") { const order = shuffle(v.o.map((_, k) => k)); v.o = order.map(k => v.o[k]); v.a = order.indexOf(v.a); }
+  return v;
+}
+function secondChance(quiz, missed) {
+  Z = { quiz, retry: true, qs: missed.map(q => variant(q, true)), i: 0, answers: [], fixed: 0, total: missed.length };
+  show();
 }
 function show() {
-  const { quiz, i } = Z, q = quiz.questions[i], lang = quiz.lang;
+  const { quiz, i } = Z, q = Z.qs[i], lang = quiz.lang;
   Z.chosen = null; Z.checked = false;
-  count.textContent = (i + 1) + " / " + quiz.questions.length;
+  count.textContent = Z.retry ? "Reste " + (Z.qs.length - i) : (i + 1) + " / " + Z.qs.length;
   let body;
   if (q.type === "qcm") {
     body = `<div class="opts">${q.o.map((o, k) => `<button class="opt" data-k="${k}" aria-pressed="false">${esc(o)}</button>`).join("")}</div>`;
@@ -560,9 +608,9 @@ function show() {
     body = `<input type="text" id="ans" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" ${q.type === "num" ? 'inputmode="decimal"' : ""} placeholder="Ta réponse" aria-label="Ta réponse">
       ${keys.length ? `<div class="keys">${keys.map(c => `<button type="button" data-c="${c}">${c}</button>`).join("")}</div>` : ""}`;
   }
-  app.innerHTML = `<div class="flag" aria-hidden="true"><div style="width:${i / quiz.questions.length * 100}%"></div></div>
+  app.innerHTML = `<div class="flag" aria-hidden="true"><div style="width:${(Z.retry ? Z.fixed / Z.total : i / Z.qs.length) * 100}%"></div></div>
     <section class="card">
-    <span class="chip">${esc(q.t)}</span>
+    <span class="chip">${Z.retry ? "2e chance · " : ""}${esc(q.t)}</span>
     <p class="q">${q.html ? q.q : esc(q.q).replaceAll("___", "<b>___</b>")}</p>
     ${q.h ? `<p class="hint">(${esc(q.h)})</p>` : ""}
     ${body}
@@ -590,7 +638,7 @@ function show() {
   act.onclick = () => Z.checked ? next() : check();
 }
 function check() {
-  const { quiz, i } = Z, q = quiz.questions[i];
+  const { quiz, i } = Z, q = Z.qs[i];
   Z.checked = true;
   let ok, given, right;
   if (q.type === "qcm") {
@@ -605,15 +653,29 @@ function check() {
     inp.readOnly = true; inp.classList.add(ok ? "right" : "wrong");
     app.querySelectorAll(".keys button").forEach(b => b.disabled = true);
   }
-  Z.answers.push({ ok, given, right, t: q.t, q: q.html ? q.q.replace(/<[^>]+>/g, "") : q.q });
+  const trap = !Z.retry && q.p && activePieges().find(p => p.id === q.p);
+  if (Z.retry) { if (ok) Z.fixed++; else Z.qs.push(variant(q.base, !q.usedAlt)); }  // missed again: comes back at the end
+  else Z.answers.push({ ok, given, right, t: q.t, p: q.p, src: q, q: q.html ? q.q.replace(/<[^>]+>/g, "") : q.q });
+  const pg = trap ? `<span class="pg">${ok ? "Piège déjoué ✓" : `C'est un de tes pièges : ${esc(trap.titre)}`}</span>` : "";
   document.getElementById("fb").innerHTML = ok
-    ? `<div class="fb ok"><strong>Juste !</strong>${esc(q.r)}</div>`
-    : `<div class="fb ko"><strong>Réponse : ${esc(right)}</strong>${esc(q.r)}</div>`;
+    ? `<div class="fb ok"><strong>Juste !</strong>${esc(q.r)}${pg}</div>`
+    : `<div class="fb ko"><strong>Réponse : ${esc(right)}</strong>${esc(q.r)}${pg}</div>`;
   const act = document.getElementById("act");
-  act.textContent = i === quiz.questions.length - 1 ? "Voir mon résultat" : "Suivant";
+  act.textContent = i < Z.qs.length - 1 ? "Suivant" : Z.retry ? "Terminer" : "Voir mon résultat";
   act.focus();
 }
-function next() { Z.i++; Z.i < Z.quiz.questions.length ? show() : result(); }
+function next() { Z.i++; Z.i < Z.qs.length ? show() : Z.retry ? retryDone() : result(); }
+function retryDone() {
+  const { total } = Z;
+  count.textContent = "Terminé";
+  app.innerHTML = `<section class="card"><p class="score">${total}<small> / ${total}</small></p>
+    <p style="margin:0"><b>Tout corrigé !</b> Tu as rattrapé ${total > 1 ? `tes ${total} erreurs` : "ton erreur"}. Elles reviendront dans tes prochains quiz pour vérifier que c'est acquis.</p></section>
+    ${pendingSave ? `<section class="card"><p class="sent ko" id="sent">Ton résultat n'est pas encore enregistré (pas de connexion). <button class="sec" id="resend" style="margin-top:6px">Réessayer</button></p></section>` : ""}
+    <button class="main" id="home">Retour à mes révisions</button>`;
+  if (pendingSave) document.getElementById("resend").onclick = pendingSave;
+  document.getElementById("home").onclick = () => go("");
+}
+let pendingSave = null;  // a result that failed to save (no connection), offered again after the second chance
 function result() {
   const { quiz, answers } = Z, total = quiz.questions.length;
   const themes = [...new Set(quiz.questions.map(q => q.t))];
@@ -624,31 +686,48 @@ function result() {
   const verdict = pct >= .9 ? "Excellent, c'est acquis." : pct >= .7 ? "Bien. Revois les thèmes en rouge." : pct >= .5 ? "C'est en progrès. Relis les fiches des thèmes en rouge." : "Encore du travail : relis les fiches puis refais le quiz.";
   const texte = `${quizLabel(quiz)} : ${n}/${total}\n` + per.map(p => `${p.ok === p.n ? "OK" : "X"} ${p.t} ${p.ok}/${p.n}`).join("\n") +
     (errs.length ? `\n\nErreurs :\n` + errs.map(e => `- ${e.q} -> "${e.given}" (juste : ${e.right})`).join("\n") : "");
+  const first = !quiz.score, best = first ? bestPct(quiz.subject, quiz.id) : null, r0 = best === null ? 0 : Math.round(best * total);
+  const rec = !first ? "" : best === null ? `<p class="rec">Premier score en ${esc(quiz.subject.name)} : c'est ton record à battre.</p>`
+    : pct > best + 1e-9 ? `<p class="rec win"><span class="star">★</span> Nouveau record en ${esc(quiz.subject.name)} !</p>`
+    : n >= r0 ? `<p class="rec">Tu égales ton record (${r0}/${total}).</p>`
+    : `<p class="rec">Ton record : <b>${r0}/${total}</b>. Plus que ${r0 - n} point${r0 - n > 1 ? "s" : ""} pour l'égaler.</p>`;
   app.innerHTML = `<section class="card">
       <p class="score">${n}<small> / ${total}</small></p>
+      ${rec}
       <p style="margin:0">${esc(verdict)}</p>
       <div class="themes">${per.map(p => {
         const c = p.ok === p.n ? "var(--ok)" : p.ok / p.n >= .5 ? "var(--gold)" : "var(--bad)";
         return `<div class="trow"><span>${esc(p.t)}</span><span class="n">${p.ok}/${p.n}</span><div class="bar"><div style="width:${p.ok / p.n * 100}%;background:${c}"></div></div></div>`;
       }).join("")}</div>
+      <div id="pgres"></div>
       <p class="sent" id="sent">Enregistrement de ton résultat…</p>
     </section>
-    ${errs.length ? `<details class="card"><summary>À revoir (${errs.length})</summary><ol class="errs">${errs.map(e => `<li>${esc(e.q)}<br><s>${esc(e.given)}</s> → <b>${esc(e.right)}</b></li>`).join("")}</ol></details>` : ""}
+    ${errs.length ? `<button class="main" id="retry">Corriger mes ${errs.length > 1 ? errs.length + " erreurs" : "erreur"}</button>
+    <details class="card"><summary>À revoir (${errs.length})</summary><ol class="errs">${errs.map(e => `<li>${esc(e.q)}<br><s>${esc(e.given)}</s> → <b>${esc(e.right)}</b></li>`).join("")}</ol></details>` : ""}
     <button class="sec" id="again">Refaire le quiz</button>
     <button class="sec" id="home">Retour à mes révisions</button>`;
-  document.getElementById("again").onclick = () => { Z = { quiz, i: 0, answers: [] }; show(); };
+  if (errs.length) document.getElementById("retry").onclick = () => secondChance(quiz, errs.map(e => e.src));
+  document.getElementById("again").onclick = () => { Z = { quiz, qs: quiz.questions, i: 0, answers: [] }; show(); };
   document.getElementById("home").onclick = () => go("");
-  const payload = { quiz: quiz.id, matiere: quiz.subject.folder, num: quiz.num, scores: Object.fromEntries(per.map(p => [p.t, [p.ok, p.n]])), texte };
+  const hits = {};
+  answers.forEach(a => { if (a.p) (hits[a.p] = hits[a.p] || []).push(a.ok); });
+  const payload = { quiz: quiz.id, matiere: quiz.subject.folder, num: quiz.num, scores: Object.fromEntries(per.map(p => [p.t, [p.ok, p.n]])), texte, pieges: hits };
   const save = () => {
     const el = document.getElementById("sent");
-    el.className = "sent"; el.textContent = "Enregistrement de ton résultat…";
+    if (el) { el.className = "sent"; el.textContent = "Enregistrement de ton résultat…"; }
     run("saveResult", payload).then(r => {
-      el.className = "sent ok";
-      el.textContent = r.recorded ? "Résultat enregistré ✓" : "Résultat enregistré ✓ (quiz refait : seule ta première tentative compte)";
+      pendingSave = null;
       if (r.recorded && !quiz.score) QUIZ[quiz.id].score = [n, total];
+      (r.pieges || []).forEach(t => { const k = (DATA.pieges || []).findIndex(x => x.id === t.id); if (k >= 0) DATA.pieges[k] = t; });
+      const pg = document.getElementById("pgres"), sent = document.getElementById("sent");
+      if (pg && r.pieges && r.pieges.length) pg.innerHTML = `<p class="small">Tes pièges dans ce quiz :</p><ul class="pieges">${r.pieges.map(piegeRow).join("")}</ul>`;
+      if (sent) { sent.className = "sent ok"; sent.textContent = r.recorded ? "Résultat enregistré ✓" : "Résultat enregistré ✓ (quiz refait : seule ta première tentative compte)"; }
     }).catch(() => {
-      el.className = "sent ko";
-      el.innerHTML = `Pas de connexion : résultat non enregistré. <button class="sec" id="resend" style="margin-top:6px">Réessayer</button>`;
+      pendingSave = save;
+      const sent = document.getElementById("sent");
+      if (!sent) return;
+      sent.className = "sent ko";
+      sent.innerHTML = `Pas de connexion : résultat non enregistré. <button class="sec" id="resend" style="margin-top:6px">Réessayer</button>`;
       document.getElementById("resend").onclick = save;
     });
   };
