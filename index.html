@@ -46,7 +46,7 @@ body { background: var(--bg); color: var(--fg); font-family: var(--body); font-s
 main { display: flex; flex-direction: column; gap: 14px; }
 header { display: flex; align-items: center; gap: 10px; min-height: 40px; }
 .back { font: inherit; font-weight: 700; border: 0; background: var(--chip); color: var(--fg); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
-h1 { font-family: var(--display); font-weight: 800; font-size: 24px; margin: 0; letter-spacing: -0.01em; text-wrap: balance; flex: 1; min-width: 0; }
+h1 { font-family: var(--display); font-weight: 800; font-size: 24px; margin: 0; letter-spacing: -0.01em; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; }
 .count { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 15px; white-space: nowrap; }
 .muted { color: var(--muted); }
@@ -190,7 +190,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--gold); outline-
 </head>
 <body>
 <div class="wrap" id="root">
-  <header><button class="back" id="back" hidden>← Retour</button><h1 id="h1">Mes révisions</h1><span class="count" id="count"></span></header>
+  <header><button class="back" id="back" aria-label="Retour" hidden>←</button><h1 id="h1">Mes révisions</h1><span class="count" id="count"></span></header>
   <main id="app"></main>
 </div>
 
@@ -248,7 +248,14 @@ function setFrame(title, m, showBack) {
   h1.textContent = title;
   if (m) root.dataset.m = m; else delete root.dataset.m;
   back.hidden = !showBack;
+  fitTitle();
 }
+// The title always stays on one line: shrink it until it fits (« Révisions avant contrôle » on a phone).
+function fitTitle() {
+  h1.style.fontSize = "";
+  for (let px = 23; h1.scrollWidth > h1.clientWidth && px >= 15; px--) h1.style.fontSize = px + "px";
+}
+addEventListener("resize", fitTitle);
 function wire() { app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go)); }
 
 function home() {
@@ -570,7 +577,7 @@ const quizLabel = quiz => `${quiz.title} ${quiz.subject.name} n°${quiz.num}`;
 function quizIntro(quiz) {
   setFrame(quiz.title, quiz.subject.key, true);
   const themes = [...new Set(quiz.questions.map(q => q.t))];
-  count.textContent = quiz.questions.length + " questions";
+  count.textContent = quiz.questions.length + " questions"; fitTitle();
   const total = quiz.questions.length, best = quiz.score ? null : bestPct(quiz.subject, quiz.id);
   const traps = new Set(quiz.questions.map(q => q.p).filter(id => activePieges().some(p => p.id === id))).size;
   app.innerHTML = `<section class="card">
@@ -604,7 +611,7 @@ function secondChance(quiz, missed) {
 function show() {
   const { quiz, i } = Z, q = Z.qs[i], lang = quiz.lang;
   Z.chosen = null; Z.checked = false;
-  count.textContent = Z.retry ? "Reste " + (Z.qs.length - i) : (i + 1) + " / " + Z.qs.length;
+  count.textContent = Z.retry ? "Reste " + (Z.qs.length - i) : (i + 1) + " / " + Z.qs.length; fitTitle();
   let body;
   if (q.type === "qcm") {
     body = `<div class="opts">${q.o.map((o, k) => `<button class="opt" data-k="${k}" aria-pressed="false">${esc(o)}</button>`).join("")}</div>`;
@@ -672,7 +679,7 @@ function check() {
 function next() { Z.i++; Z.i < Z.qs.length ? show() : Z.retry ? retryDone() : result(); }
 function retryDone() {
   const { total } = Z;
-  count.textContent = "Terminé";
+  count.textContent = "Terminé"; fitTitle();
   app.innerHTML = `<section class="card"><p class="score">${total}<small> / ${total}</small></p>
     <p style="margin:0"><b>Tout corrigé !</b> Tu as rattrapé ${total > 1 ? `tes ${total} erreurs` : "ton erreur"}. Elles reviendront dans tes prochains quiz pour vérifier que c'est acquis.</p></section>
     ${pendingSave ? `<section class="card"><p class="sent ko" id="sent">Ton résultat n'est pas encore enregistré (pas de connexion). <button class="sec" id="resend" style="margin-top:6px">Réessayer</button></p></section>` : ""}
@@ -685,7 +692,7 @@ function result() {
   const { quiz, answers } = Z, total = quiz.questions.length;
   const themes = [...new Set(quiz.questions.map(q => q.t))];
   const n = answers.filter(a => a.ok).length;
-  count.textContent = "Terminé";
+  count.textContent = "Terminé"; fitTitle();
   const per = themes.map(t => { const xs = answers.filter(a => a.t === t); return { t, ok: xs.filter(a => a.ok).length, n: xs.length }; });
   const errs = answers.filter(a => !a.ok), pct = n / total;
   const verdict = pct >= .9 ? "Excellent, c'est acquis." : pct >= .7 ? "Bien. Revois les thèmes en rouge." : pct >= .5 ? "C'est en progrès. Relis les fiches des thèmes en rouge." : "Encore du travail : relis les fiches puis refais le quiz.";
