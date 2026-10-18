@@ -42,7 +42,9 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 17px; line-height: 1.45; }
-.wrap { max-width: 560px; margin: 0 auto; padding-inline: 16px; padding-block: 10px 28px; display: flex; flex-direction: column; gap: 12px; }
+.wrap { max-width: 560px; margin: 0 auto; padding-inline: 16px; padding-block: calc(10px + env(safe-area-inset-top, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px; }
+/* Installed on the home screen the page runs under the phone's status bar: keep that strip opaque. */
+body::before { content: ""; position: fixed; inset: 0 0 auto 0; height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 10; }
 main { display: flex; flex-direction: column; gap: 14px; }
 header { display: flex; align-items: center; gap: 10px; min-height: 40px; }
 .back { font: inherit; font-weight: 700; border: 0; background: var(--chip); color: var(--fg); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
