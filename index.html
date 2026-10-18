@@ -268,7 +268,7 @@ function home() {
   const redo = DATA.scans.filter(s => s.status === "à refaire");  // only what asks something of her
   const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
   const tomorrow = new Date(Date.parse(TODAY + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
-  app.innerHTML = `${askCard()}
+  app.innerHTML = `${linkCard()}${askCard()}
     ${soon.length || edtLine(tomorrow) ? `<section class="card" data-m="agenda"><h2>À venir</h2>
       ${soon.length ? `<ul class="due">${soon.map(agRow).join("")}</ul>` : `<p class="empty">Aucun devoir ni contrôle noté pour les 7 prochains jours.</p>`}
       ${edtLine(tomorrow) ? `<p class="small">Demain (${dayName(tomorrow)}) :</p>${edtLine(tomorrow)}` : ""}</section>` : ""}
@@ -684,12 +684,16 @@ function retryDone() {
   count.textContent = "Terminé"; fitTitle();
   app.innerHTML = `<section class="card"><p class="score">${total}<small> / ${total}</small></p>
     <p style="margin:0"><b>Tout corrigé !</b> Tu as rattrapé ${total > 1 ? `tes ${total} erreurs` : "ton erreur"}. Elles reviendront dans tes prochains quiz pour vérifier que c'est acquis.</p></section>
-    ${pendingSave ? `<section class="card"><p class="sent ko" id="sent">Ton résultat n'est pas encore enregistré (pas de connexion). <button class="sec" id="resend" style="margin-top:6px">Réessayer</button></p></section>` : ""}
+    ${linkCard()}${pendingSave && !linkBad ? `<section class="card"><p class="sent ko" id="sent">Ton résultat n'est pas encore enregistré (pas de connexion). <button class="sec" id="resend" style="margin-top:6px">Réessayer</button></p></section>` : ""}
     <button class="main" id="home">Retour à mes révisions</button>`;
-  if (pendingSave) document.getElementById("resend").onclick = pendingSave;
+  if (pendingSave && !linkBad) document.getElementById("resend").onclick = pendingSave;
   document.getElementById("home").onclick = () => go("");
 }
 let pendingSave = null;  // a result that failed to save (no connection), offered again after the second chance
+// Her link's key was refused (key rotated, or the site opened without her link): nothing can be saved.
+let linkBad = false;
+const LINK_MSG = "Ton lien de révisions a changé : ouvre le nouveau lien qu'on t'a envoyé pour enregistrer tes résultats.";
+const linkCard = () => linkBad ? `<section class="card"><p class="sent ko" style="margin:0">${LINK_MSG}</p></section>` : "";
 function result() {
   const { quiz, answers } = Z, total = quiz.questions.length;
   const themes = [...new Set(quiz.questions.map(q => q.t))];
@@ -736,11 +740,12 @@ function result() {
       const pg = document.getElementById("pgres"), sent = document.getElementById("sent");
       if (pg && r.pieges && r.pieges.length) pg.innerHTML = `<p class="small">Tes pièges dans ce quiz :</p><ul class="pieges">${r.pieges.map(piegeRow).join("")}</ul>`;
       if (sent) { sent.className = "sent ok"; sent.textContent = r.recorded ? "Résultat enregistré ✓" : "Résultat enregistré ✓ (quiz refait : seule ta première tentative compte)"; }
-    }).catch(() => {
-      pendingSave = save;
+    }).catch(err => {
+      if (/forbidden/.test(String(err && err.message))) linkBad = true; else pendingSave = save;
       const sent = document.getElementById("sent");
       if (!sent) return;
       sent.className = "sent ko";
+      if (linkBad) { sent.textContent = LINK_MSG; return; }
       sent.innerHTML = `Pas de connexion : résultat non enregistré. <button class="sec" id="resend" style="margin-top:6px">Réessayer</button>`;
       document.getElementById("resend").onclick = save;
     });
@@ -762,7 +767,7 @@ function loadData() {
 try { const d = JSON.parse(store.get("data")); if (d && d.subjects) { index(d); render(); } } catch (e) {}
 if (!DATA) app.innerHTML = `<p class="empty">Chargement…</p>`;
 loadData().catch(err => {
-  if (DATA) return;
+  if (DATA) { if (err.message === "forbidden") { linkBad = true; if (!stack.length) render(); } return; }
   app.innerHTML = !KEY || err.message === "forbidden"
     ? `<section class="card"><h2>Ouvre ton lien</h2><p class="small" style="font-size:15px">Pour voir tes révisions, ouvre le lien personnel qu'on t'a envoyé.</p></section>`
     : `<section class="card"><h2>Pas de connexion</h2><p class="small" style="font-size:15px">Vérifie ta connexion internet, puis réessaie.</p><button class="main" onclick="location.reload()">Réessayer</button></section>`;
