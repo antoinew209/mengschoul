@@ -198,7 +198,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--gold); outline-
 // Data comes from the Google Apps Script web app; the last copy is kept on the phone so the page
 // shows at once (even offline) and is refreshed in the background.
 const EXEC = "https://script.google.com/macros/s/AKfycbyrXvqdwXXtxt1GDKsNZqPEVr4zBOTBlcDsCS2qfgU-6W4TKBAADx403CEBaTuorQcWOg/exec";
-const KEY = "ms-7Kq2xV9pL4";
+// Her link carries the key (…/mengschoul/#k=…), so this public code holds none; it stays on the phone after the first visit.
+const KEY = (() => {
+  const m = /[#&]k=([\w-]+)/.exec(location.hash);
+  try { if (m) localStorage.setItem("ms-key", m[1]); return m ? m[1] : localStorage.getItem("ms-key") || ""; }
+  catch (e) { return m ? m[1] : ""; }
+})();
 let DATA, SUBJ, QUIZ, FICHE;
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
@@ -737,8 +742,8 @@ function result() {
 let fetchedAt = 0;
 function loadData() {
   fetchedAt = Date.now();
-  return fetch(EXEC + "?api=data").then(r => r.json()).then(d => {
-    if (!d || !d.subjects) throw new Error("data");
+  return fetch(EXEC, { method: "POST", body: JSON.stringify({ key: KEY, fn: "data" }) }).then(r => r.json()).then(d => {
+    if (!d || !d.subjects) throw new Error((d && d.error) || "data");
     const first = !DATA;
     store.set("data", JSON.stringify(d));
     index(d);
@@ -747,8 +752,11 @@ function loadData() {
 }
 try { const d = JSON.parse(store.get("data")); if (d && d.subjects) { index(d); render(); } } catch (e) {}
 if (!DATA) app.innerHTML = `<p class="empty">Chargement…</p>`;
-loadData().catch(() => {
-  if (!DATA) app.innerHTML = `<section class="card"><h2>Pas de connexion</h2><p class="small" style="font-size:15px">Vérifie ta connexion internet, puis réessaie.</p><button class="main" onclick="location.reload()">Réessayer</button></section>`;
+loadData().catch(err => {
+  if (DATA) return;
+  app.innerHTML = !KEY || err.message === "forbidden"
+    ? `<section class="card"><h2>Ouvre ton lien</h2><p class="small" style="font-size:15px">Pour voir tes révisions, ouvre le lien personnel qu'on t'a envoyé.</p></section>`
+    : `<section class="card"><h2>Pas de connexion</h2><p class="small" style="font-size:15px">Vérifie ta connexion internet, puis réessaie.</p><button class="main" onclick="location.reload()">Réessayer</button></section>`;
 });
 document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - fetchedAt > 120000) loadData().catch(() => {}); });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
