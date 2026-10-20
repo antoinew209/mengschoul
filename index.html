@@ -66,6 +66,7 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .row { font: inherit; color: var(--fg); text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; cursor: pointer; display: flex; align-items: center; gap: 12px; }
 .row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .row .txt small { color: var(--muted); font-size: 14px; }
+.more { font: inherit; font-size: 15px; font-weight: 700; color: var(--fg); background: var(--chip); border: 0; border-radius: 14px; padding: 10px 14px; cursor: pointer; text-align: center; }
 .badge { font-size: 14px; font-weight: 700; border-radius: 999px; padding: 3px 10px; white-space: nowrap; background: var(--chip); color: var(--muted); font-variant-numeric: tabular-nums; }
 .badge.good { background: var(--ok-bg); color: var(--ok); }
 .badge.mid { background: var(--chip); color: var(--fg); }
@@ -279,7 +280,7 @@ function home() {
       : todo.length ? `<p class="empty">Rien à revoir, ${todo.length} quiz ${todo.length > 1 ? "t'attendent" : "t'attend"}.</p>`
       : `<p class="empty">Rien à faire aujourd'hui. Bravo !</p>`}
     ${todo.length ? `<section class="list"><h2>Quiz à faire</h2>${todo.slice(0, 2).map(quizRow).join("")}
-      ${todo.length > 2 ? `<p class="small">+ ${todo.length - 2} autre${todo.length > 3 ? "s" : ""} dans Mes matières</p>` : ""}</section>` : ""}
+      ${todo.length > 2 ? `<button class="more" id="more">${todo.length > 3 ? `Voir les ${todo.length - 2} autres quiz` : "Voir l'autre quiz"}</button>` : ""}</section>` : ""}
     ${piegesCard()}
     <button class="main" data-go="scan">Scanner un document</button>
     <section class="list"><h2>Mes matières</h2><div class="tiles">${DATA.subjects.map(s => `
@@ -290,7 +291,7 @@ function home() {
       <span>${esc(s.label)}${s.note ? `<br><span class="small">${esc(s.note)}</span>` : ""}</span></li>`).join("")}</ul></section>` : ""}
     <div class="tiles"><button class="sec" data-go="agenda">Mon agenda</button><button class="sec" data-go="progres">Mes progrès</button></div>
     <p class="small">Mis à jour le ${esc(DATA.updated)}.</p>`;
-  wire(); wireAgenda(home);
+  wire(); wireAgenda(home); moreQuizzes(todo);
 }
 
 // Traps = her recurring mistakes, listed by the cloud job; one goes out after piegeWin right answers in a row.
@@ -306,6 +307,11 @@ function piegesCard() {
     <p class="small">${WIN()} réussites de suite éteignent un piège.${off ? ` Éteint${off > 1 ? "s" : ""} : ${off}.` : ""}</p></section>`;
 }
 
+// The rest of her quizzes unfold in place: one tap, no detour through each subject.
+function moreQuizzes(todo) {
+  const b = document.getElementById("more");
+  if (b) b.onclick = () => { b.outerHTML = todo.slice(2).map(quizRow).join(""); wire(); };
+}
 function quizRow(q) {
   q = QUIZ[q.id];
   return `<button class="row" data-m="${q.subject.key}" data-go="q-${q.id}"><span class="dot"></span>
