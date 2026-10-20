@@ -168,12 +168,16 @@ details > summary { cursor: pointer; font-family: var(--display); font-weight: 6
 .stat b { font-family: var(--display); font-weight: 800; font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .stat span { color: var(--muted); font-size: 13px; }
 .chart { position: relative; display: flex; align-items: flex-end; gap: 8px; height: 150px; padding-top: 18px; border-bottom: 2px solid var(--line); }
-.chart .goal { position: absolute; left: 0; right: 0; bottom: 80%; border-top: 2px dashed var(--line); }
-.chart .goal span { position: absolute; right: 0; top: -18px; font-size: 12px; color: var(--muted); }
+/* Same box as the bars (below the label room), so the line sits exactly at 80 % of a bar's full height. */
+.chart .goal { position: absolute; left: 0; right: 0; top: 18px; bottom: 0; pointer-events: none; }
+.chart .goal::before { content: ""; position: absolute; left: 0; right: 0; bottom: 80%; border-top: 2px dashed var(--muted); opacity: .5; }
+.chart-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.chart-h span { font-family: var(--body); font-weight: 400; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .col { flex: 1; max-width: 56px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; position: relative; }
 .col i { font-style: normal; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .col div { width: 100%; border-radius: 6px 6px 0 0; background: var(--accent); }
 .col div.low { opacity: .45; }
+.col div.goal-ok { background: var(--ok); }
 .cols-x { display: flex; gap: 8px; }
 .cols-x span { flex: 1; max-width: 56px; text-align: center; font-size: 13px; color: var(--muted); }
 /* scan */
@@ -442,9 +446,9 @@ function progress() {
       const msg = qs.length < 2 ? "Fais le quiz suivant pour voir ta progression."
         : last > first ? `+${last - first} points entre le quiz n°${qs[0].num} et le n°${qs[qs.length - 1].num}. Bravo !`
         : "Les quiz deviennent plus difficiles : c'est normal que ça bouge. Relis les fiches des notions en rouge.";
-      return `<section class="card" data-m="${s.key}"><h2>${esc(s.name)}</h2>
-        <div class="chart" role="img" aria-label="Scores des quiz ${esc(s.name)}"><div class="goal"><span>objectif 80 %</span></div>
-          ${qs.map(q => `<div class="col"><i>${pct(q.score)} %</i><div class="${pct(q.score) < 60 ? "low" : ""}" style="height:${Math.max(pct(q.score), 3)}%"></div></div>`).join("")}</div>
+      return `<section class="card" data-m="${s.key}"><h2 class="chart-h">${esc(s.name)}<span>- - objectif 80 %</span></h2>
+        <div class="chart" role="img" aria-label="Scores des quiz ${esc(s.name)}"><div class="goal"></div>
+          ${qs.map(q => `<div class="col"><i>${pct(q.score)} %</i><div class="${pct(q.score) >= 80 ? "goal-ok" : pct(q.score) < 60 ? "low" : ""}" style="height:${Math.max(pct(q.score), 3)}%"></div></div>`).join("")}</div>
         <div class="cols-x">${qs.map(q => `<span>n°${esc(q.num)}</span>`).join("")}</div>
         <p class="small">${msg}</p>
         <h2>Mes notions</h2>
