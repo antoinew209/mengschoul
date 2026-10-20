@@ -283,8 +283,8 @@ function home() {
       <p class="small">Relis la fiche de ces notions, puis refais le dernier quiz de la matière.</p></section>`
       : todo.length ? `<p class="empty">Rien à revoir, ${todo.length} quiz ${todo.length > 1 ? "t'attendent" : "t'attend"}.</p>`
       : `<p class="empty">Rien à faire aujourd'hui. Bravo !</p>`}
-    ${todo.length ? `<section class="list"><h2>Quiz à faire</h2>${todo.slice(0, 2).map(quizRow).join("")}
-      ${todo.length > 2 ? `<button class="more" id="more">${todo.length > 3 ? `Voir les ${todo.length - 2} autres quiz` : "Voir l'autre quiz"}</button>` : ""}</section>` : ""}
+    ${todo.length ? `<section class="list"><h2>Quiz à faire</h2>${todo.slice(0, allQuiz ? todo.length : 2).map(quizRow).join("")}
+      ${todo.length > 2 && !allQuiz ? `<button class="more" id="more">${todo.length > 3 ? `Voir les ${todo.length - 2} autres quiz` : "Voir l'autre quiz"}</button>` : ""}</section>` : ""}
     ${piegesCard()}
     <button class="main" data-go="scan">Scanner un document</button>
     <section class="list"><h2>Mes matières</h2><div class="tiles">${DATA.subjects.map(s => `
@@ -311,10 +311,12 @@ function piegesCard() {
     <p class="small">${WIN()} réussites de suite éteignent un piège.${off ? ` Éteint${off > 1 ? "s" : ""} : ${off}.` : ""}</p></section>`;
 }
 
-// The rest of her quizzes unfold in place: one tap, no detour through each subject.
+// The rest of her quizzes unfold in place: one tap, no detour through each subject. The choice outlives
+// re-renders (the background data refresh redraws the home page a moment after it opens).
+let allQuiz = false;
 function moreQuizzes(todo) {
   const b = document.getElementById("more");
-  if (b) b.onclick = () => { b.outerHTML = todo.slice(2).map(quizRow).join(""); wire(); };
+  if (b) b.onclick = () => { allQuiz = true; b.outerHTML = todo.slice(2).map(quizRow).join(""); wire(); };
 }
 function quizRow(q) {
   q = QUIZ[q.id];
