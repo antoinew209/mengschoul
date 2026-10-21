@@ -268,12 +268,15 @@ function wire() { app.querySelectorAll("[data-go]").forEach(b => b.onclick = () 
 
 function home() {
   setFrame("Mes révisions", null, false);
+  const tomorrow = new Date(Date.parse(TODAY + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
+  // The day before and the day of a test, home offers only that subject: the rest stays in Mes matières.
+  const exam = agItems().find(it => it.type === "controle" && SUBJ[it.matiere] && (it.date === TODAY || it.date === tomorrow));
+  const mine = s => !exam || s.key === exam.matiere;
   const due = [];
-  DATA.subjects.forEach(s => s.review.forEach(r => { if (r.status !== "acquis" && r.next && r.next <= TODAY) due.push({ s, r }); }));
-  const todo = Object.values(QUIZ).filter(q => !q.score);
+  DATA.subjects.filter(mine).forEach(s => s.review.forEach(r => { if (r.status !== "acquis" && r.next && r.next <= TODAY) due.push({ s, r }); }));
+  const todo = Object.values(QUIZ).filter(q => !q.score && mine(q.subject));
   const redo = DATA.scans.filter(s => s.status === "à refaire");  // only what asks something of her
   const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
-  const tomorrow = new Date(Date.parse(TODAY + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
   app.innerHTML = `${linkCard()}${askCard()}
     ${soon.length || edtLine(tomorrow) ? `<section class="card" data-m="agenda"><h2>À venir</h2>
       ${soon.length ? `<ul class="due">${soon.map(agRow).join("")}</ul>` : `<p class="empty">Aucun devoir ni contrôle noté pour les 7 prochains jours.</p>`}
@@ -283,7 +286,7 @@ function home() {
       <p class="small">Relis la fiche de ces notions, puis refais le dernier quiz de la matière.</p></section>`
       : todo.length ? `<p class="empty">Rien à revoir, ${todo.length} quiz ${todo.length > 1 ? "t'attendent" : "t'attend"}.</p>`
       : `<p class="empty">Rien à faire aujourd'hui. Bravo !</p>`}
-    ${todo.length ? `<section class="list"><h2>Quiz à faire</h2>${todo.slice(0, allQuiz ? todo.length : 2).map(quizRow).join("")}
+    ${todo.length ? `<section class="list"><h2>${exam ? `Pour ton contrôle ${exam.date === TODAY ? "d'aujourd'hui" : "de demain"}` : "Quiz à faire"}</h2>${todo.slice(0, allQuiz ? todo.length : 2).map(quizRow).join("")}
       ${todo.length > 2 && !allQuiz ? `<button class="more" id="more">${todo.length > 3 ? `Voir les ${todo.length - 2} autres quiz` : "Voir l'autre quiz"}</button>` : ""}</section>` : ""}
     ${piegesCard()}
     <button class="main" data-go="scan">Scanner un document</button>
