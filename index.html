@@ -253,6 +253,7 @@ function render() {
   if (t.startsWith("m-") && SUBJ[t.slice(2)]) return subjectView(SUBJ[t.slice(2)]);
   if (t.startsWith("q-") && QUIZ[t.slice(2)]) return quizIntro(QUIZ[t.slice(2)]);
   if (t.startsWith("f-") && FICHE[t.slice(2)]) return ficheView(FICHE[t.slice(2)]);
+  if (t.startsWith("fa-") && FICHE[t.slice(3)]) return ficheView(FICHE[t.slice(3)], true);
   if (t === "scan") return scanSubject();
   if (t === "progres") return progress();
   if (t === "agenda") return agendaView();
@@ -299,7 +300,7 @@ function home() {
     <button class="main" data-go="scan">Scanner un document</button>
     <section class="list"><h2>Mes matières</h2><div class="tiles">${DATA.subjects.map(s => `
       <button class="tile" data-m="${s.key}" data-go="m-${s.key}"><b>${esc(s.name)}</b>
-      <span>${s.fiches.length} fiche${s.fiches.length > 1 ? "s" : ""} · ${s.quizzes.length} quiz</span></button>`).join("")}</div></section>
+      <span>${((n) => `${n} fiche${n > 1 ? "s" : ""}`)(s.fiches.filter(f => liveCards(f, s).length).length)} · ${s.quizzes.length} quiz</span></button>`).join("")}</div></section>
     ${redo.length ? `<section class="card"><h2>Scan à refaire</h2><ul class="due">${redo.map(s => `
       <li><span class="badge ${s.status === "à refaire" ? "low" : s.status === "traité" ? "good" : "mid"}">${esc(s.status)}</span>
       <span>${esc(s.label)}${s.note ? `<br><span class="small">${esc(s.note)}</span>` : ""}</span></li>`).join("")}</ul></section>` : ""}
@@ -334,14 +335,28 @@ function quizRow(q) {
     <span class="txt"><span>${esc(q.title)}</span><small>${q.questions.length} questions · ${esc(q.subject.name)}</small></span>${badge(q)}</button>`;
 }
 
+// A card names its notions (`t`: a theme or a list). Once every one is « acquis », the card hides: she revises
+// only what she does not master yet. A fiche with no card left moves under « Voir les fiches maîtrisées ».
+function cardDone(c, s) {
+  const ts = [].concat(c.t || []);
+  return ts.length > 0 && ts.every(t => (s.review.find(r => r.theme === t) || {}).status === "acquis");
+}
+const liveCards = (f, s) => f.cards.filter(c => !cardDone(c, s));
+function ficheRow(f, s, all) {
+  const n = all ? f.cards.length : liveCards(f, s).length;
+  return `<button class="row" data-go="${all ? "fa" : "f"}-${f.id}"><span class="dot"></span><span class="txt"><span>${esc(f.title)}</span><small>${n} fiche${n > 1 ? "s" : ""} à faire défiler</small></span></button>`;
+}
 function subjectView(s) {
   setFrame(s.name, s.key, true);
+  const live = s.fiches.filter(f => liveCards(f, s).length), done = s.fiches.filter(f => !liveCards(f, s).length);
   app.innerHTML = `
-    ${s.fiches.length ? `<section class="list"><h2>Fiches</h2>${s.fiches.map(f => `
-      <button class="row" data-go="f-${f.id}"><span class="dot"></span><span class="txt"><span>${esc(f.title)}</span><small>${f.cards.length} fiches à faire défiler</small></span></button>`).join("")}</section>` : ""}
+    ${s.fiches.length ? `<section class="list"><h2>Fiches</h2>${live.map(f => ficheRow(f, s)).join("")}${live.length ? "" : `<p class="empty">Toutes tes fiches sont maîtrisées. Bravo !</p>`}
+      ${done.length ? `<button class="more" id="donef">Voir ${done.length > 1 ? `les ${done.length} fiches maîtrisées` : "la fiche maîtrisée"}</button>` : ""}</section>` : ""}
     <section class="list"><h2>Quiz</h2>${s.quizzes.length ? s.quizzes.map(quizRow).join("") : `<p class="empty">Pas encore de quiz. Scanne un cours pour en avoir un.</p>`}</section>
     ${s.review.length ? `<section class="card"><h2>Mes notions</h2><ul class="due">${s.review.map(r => `
       <li><span class="badge ${r.status === "acquis" ? "good" : r.status === "en cours" ? "mid" : "low"}">${esc(r.status)}</span><span>${esc(r.theme)}</span></li>`).join("")}</ul></section>` : ""}`;
+  const b = document.getElementById("donef");
+  if (b) b.onclick = () => { b.outerHTML = done.map(f => ficheRow(f, s, true)).join(""); wire(); };
   wire();
 }
 
@@ -360,14 +375,15 @@ function cardHtml(c, k, n) {
   return `<article class="fcard"><div class="fhead">${esc(c.title)}<span>${k}/${n}</span></div><div class="fbody">${body}</div></article>`;
 }
 
-function ficheView(f) {
+function ficheView(f, all) {
   setFrame(f.title, f.subject.key, true);
-  app.innerHTML = `<div class="fcards" id="car">${f.cards.map((c, k) => cardHtml(c, k + 1, f.cards.length)).join("")}</div>
-    <p class="pager" id="pager">Fais glisser pour la fiche suivante · 1 / ${f.cards.length}</p>`;
+  const live = liveCards(f, f.subject), cards = all || !live.length ? f.cards : live;
+  app.innerHTML = `<div class="fcards" id="car">${cards.map((c, k) => cardHtml(c, k + 1, cards.length)).join("")}</div>
+    <p class="pager" id="pager">Fais glisser pour la fiche suivante · 1 / ${cards.length}</p>`;
   const car = document.getElementById("car"), pager = document.getElementById("pager");
   car.addEventListener("scroll", () => {
     const k = Math.round(car.scrollLeft / (car.firstElementChild.getBoundingClientRect().width + 12));
-    pager.textContent = (k + 1) + " / " + f.cards.length;
+    pager.textContent = (k + 1) + " / " + cards.length;
   }, { passive: true });
 }
 
