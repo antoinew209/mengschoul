@@ -703,6 +703,30 @@ function retryDone() {
   document.getElementById("home").onclick = () => go("");
 }
 let pendingSave = null;  // a result that failed to save (no connection), offered again after the second chance
+// Every result waits in this phone's outbox until the server has it: a lost connection or a closed app
+// no longer loses a quiz, it is sent again the next time the app opens or comes back online.
+const outbox = {
+  all() { try { return JSON.parse(store.get("outbox")) || []; } catch (e) { return []; } },
+  add(p) { store.set("outbox", JSON.stringify(outbox.all().filter(x => x.sid !== p.sid).concat([p]))); },
+  drop(sid) { store.set("outbox", JSON.stringify(outbox.all().filter(x => x.sid !== sid))); },
+};
+let flushing = false;
+function flushOutbox() {
+  const box = outbox.all();
+  if (flushing || pendingSave || linkBad || !box.length) return;
+  flushing = true;
+  box.reduce((pr, p) => pr.then(() => run("saveResult", p).then(r => {
+    outbox.drop(p.sid);
+    const q = QUIZ && QUIZ[p.quiz], sc = Object.values(p.scores);
+    if (r.recorded && q && !q.score) q.score = [sc.reduce((a, x) => a + x[0], 0), sc.reduce((a, x) => a + x[1], 0)];
+  })), Promise.resolve())
+    .then(() => typeof loadData === "function" ? loadData() : !stack.length && render())
+    .catch(err => { if (/forbidden/.test(String(err && err.message))) linkBad = true; })
+    .finally(() => { flushing = false; });
+}
+setTimeout(flushOutbox, 1500);
+addEventListener("online", flushOutbox);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) flushOutbox(); });
 // Her link's key was refused (key rotated, or the site opened without her link): nothing can be saved.
 let linkBad = false;
 const LINK_MSG = "Ton lien de révisions a changé : ouvre le nouveau lien qu'on t'a envoyé pour enregistrer tes résultats.";
@@ -742,12 +766,13 @@ function result() {
   document.getElementById("home").onclick = () => go("");
   const hits = {};
   answers.forEach(a => { if (a.p) (hits[a.p] = hits[a.p] || []).push(a.ok); });
-  const payload = { quiz: quiz.id, matiere: quiz.subject.folder, num: quiz.num, scores: Object.fromEntries(per.map(p => [p.t, [p.ok, p.n]])), texte, pieges: hits };
+  const payload = { quiz: quiz.id, matiere: quiz.subject.folder, num: quiz.num, scores: Object.fromEntries(per.map(p => [p.t, [p.ok, p.n]])), texte, pieges: hits, sid: Date.now() + "-" + quiz.id };
+  outbox.add(payload);
   const save = () => {
     const el = document.getElementById("sent");
     if (el) { el.className = "sent"; el.textContent = "Enregistrement de ton résultat…"; }
     run("saveResult", payload).then(r => {
-      pendingSave = null;
+      pendingSave = null; outbox.drop(payload.sid);
       if (r.recorded && !quiz.score) QUIZ[quiz.id].score = [n, total];
       (r.pieges || []).forEach(t => { const k = (DATA.pieges || []).findIndex(x => x.id === t.id); if (k >= 0) DATA.pieges[k] = t; });
       const pg = document.getElementById("pgres"), sent = document.getElementById("sent");
