@@ -115,6 +115,8 @@ input.wrong { border-color: var(--bad); background: var(--bad-bg); }
 .fb.ko { background: var(--bad-bg); color: var(--fg); }
 .fb strong { display: block; margin-bottom: 2px; }
 .fb.ko strong { color: var(--bad); }
+.fb .why { display: block; }
+.fb .rule { display: block; margin-top: 6px; font-size: 15px; color: var(--muted); }
 .main { font: inherit; font-weight: 700; font-size: 18px; padding: 13px; border-radius: 14px; border: 0; background: var(--fg); color: var(--bg); cursor: pointer; width: 100%; text-align: center; display: block; }
 .main:disabled { opacity: .35; cursor: default; }
 .sec { font: inherit; font-weight: 700; padding: 11px; border-radius: 14px; border: 2px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; width: 100%; text-align: center; display: block; }
@@ -592,6 +594,13 @@ function toNum(s) {
   const n = Number(s);
   return Number.isFinite(n) && s !== "" ? n : NaN;
 }
+// What she misunderstood, not just the rule: qcm `w` = one explanation per option (null for the right one);
+// text `w` = { usual wrong answer: explanation }, `e` = explanation for any other wrong answer.
+function whyWrong(q, given, lang) {
+  if (q.type === "qcm") return (q.w && q.w[Z.chosen]) || q.e || "";
+  const g = normText(given, q.lang || lang), hit = q.w && Object.keys(q.w).find(k => normText(k, q.lang || lang) === g);
+  return (hit && q.w[hit]) || q.e || "";
+}
 function isRight(q, given, lang) {
   if (q.type === "num") { const g = toNum(given), tol = q.tol ?? 1e-9; return q.a.some(a => Math.abs(toNum(String(a)) - g) <= tol); }
   return q.a.some(a => normText(a, q.lang || lang) === normText(given, q.lang || lang));
@@ -625,7 +634,8 @@ function shuffle(xs) {
 // Second-chance copy of a missed question: its `alt` wording when it has one, choices reshuffled.
 function variant(q, useAlt) {
   const v = { ...q, ...(useAlt && q.alt ? q.alt : {}), base: q, usedAlt: !!(useAlt && q.alt) };
-  if (v.type === "qcm") { const order = shuffle(v.o.map((_, k) => k)); v.o = order.map(k => v.o[k]); v.a = order.indexOf(v.a); }
+  if (v.usedAlt) { v.w = q.alt.w; v.e = q.alt.e; }  // the main question's explanations do not fit the other sentence
+  if (v.type === "qcm") { const order = shuffle(v.o.map((_, k) => k)); v.o = order.map(k => v.o[k]); if (v.w) v.w = order.map(k => v.w[k]); v.a = order.indexOf(v.a); }
   return v;
 }
 function secondChance(quiz, missed) {
@@ -692,10 +702,11 @@ function check() {
   const trap = !Z.retry && q.p && activePieges().find(p => p.id === q.p);
   if (Z.retry) { if (ok) Z.fixed++; else Z.qs.push(variant(q.base, !q.usedAlt)); }  // missed again: comes back at the end
   else Z.answers.push({ ok, given, right, t: q.t, p: q.p, src: q, q: q.html ? q.q.replace(/<[^>]+>/g, "") : q.q });
+  const why = ok ? "" : whyWrong(q, given, quiz.lang);
   const pg = trap ? `<span class="pg">${ok ? "Piège déjoué ✓" : `C'est un de tes pièges : ${esc(trap.titre)}`}</span>` : "";
   document.getElementById("fb").innerHTML = ok
     ? `<div class="fb ok"><strong>Juste !</strong>${esc(q.r)}${pg}</div>`
-    : `<div class="fb ko"><strong>Réponse : ${esc(right)}</strong>${esc(q.r)}${pg}</div>`;
+    : `<div class="fb ko"><strong>Réponse : ${esc(right)}</strong>${why ? `<span class="why">${esc(why)}</span><span class="rule">À retenir : ${esc(q.r)}</span>` : esc(q.r)}${pg}</div>`;
   const act = document.getElementById("act");
   act.textContent = i < Z.qs.length - 1 ? "Suivant" : Z.retry ? "Terminer" : "Voir mon résultat";
   act.focus();
