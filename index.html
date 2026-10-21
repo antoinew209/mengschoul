@@ -148,8 +148,13 @@ details > summary { cursor: pointer; font-family: var(--display); font-weight: 6
 /* agenda */
 .ag { display: flex; align-items: center; gap: 10px; }
 .ag .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.ag small { color: var(--muted); font-size: 14px; }
-.ag.late small { color: var(--bad); font-weight: 700; }
+.due li.ag { align-items: flex-start; }
+.ag small, .ag .meta { color: var(--muted); font-size: 14px; }
+/* Tag and button sit inside the text column, so the details get the full width. */
+.ag .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ag .meta .tag { padding: 2px 6px; }
+.ag .txt .mini { align-self: flex-start; margin-top: 6px; }
+.ag.late .meta { color: var(--bad); font-weight: 700; }
 .ag.done b { text-decoration: line-through; color: var(--muted); }
 .chk { width: 30px; height: 30px; border-radius: 8px; border: 2px solid var(--accent); background: transparent; color: transparent; font: inherit; font-weight: 800; cursor: pointer; flex: none; }
 .chk[aria-pressed="true"] { background: var(--accent); color: #fff; }
@@ -393,9 +398,10 @@ function agRow(it) {
   const wait = it.type === "controle" && s && !it.quiz && d >= 0 && d <= 3;
   const what = s ? s.name : it.autre;
   return `<li class="ag${it.done ? " done" : ""}${late ? " late" : ""}" data-m="${s ? s.key : "agenda"}">
-    ${it.type === "devoir" ? `<button class="chk" data-ag="${esc(it.id)}" aria-pressed="${!!it.done}" aria-label="Fait">✓</button>` : `<span class="tag">${it.type === "controle" ? "Contrôle" : "Info"}</span>`}
-    <span class="txt"><b>${esc(it.title)}</b><small>${what ? esc(what) + " · " : ""}${dayLabel(it.date)}${it.details ? " · " + esc(it.details) : ""}${wait ? " · quiz de révision en préparation" : ""}</small></span>
-    ${prep ? `<button class="mini" data-go="q-${esc(it.quiz)}">Réviser</button>` : ""}</li>`;
+    ${it.type === "devoir" ? `<button class="chk" data-ag="${esc(it.id)}" aria-pressed="${!!it.done}" aria-label="Fait">✓</button>` : ""}
+    <span class="txt"><span class="meta">${it.type === "devoir" ? "" : `<span class="tag">${it.type === "controle" ? "Contrôle" : "Info"}</span>`}<span>${what ? esc(what) + " · " : ""}${dayLabel(it.date)}</span></span>
+      <b>${esc(it.title)}</b>${it.details ? `<small>${esc(it.details)}</small>` : ""}${wait ? `<small>Quiz de révision en préparation</small>` : ""}
+      ${prep ? `<button class="mini" data-go="q-${esc(it.quiz)}">Réviser</button>` : ""}</span></li>`;
 }
 function wireAgenda(again) {
   app.querySelectorAll("[data-ag]").forEach(b => b.onclick = () => {
