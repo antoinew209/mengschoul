@@ -144,6 +144,7 @@ input.wrong { border-color: var(--bad); background: var(--bad-bg); }
 .pieges { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .pieges li { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 10px; align-items: center; }
 .pieges li > .small { grid-column: 2 / -1; }
+.pieges li.go { cursor: pointer; }
 .pips { display: flex; gap: 4px; }
 .pips i { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--accent); box-sizing: border-box; }
 .pips i.on { background: var(--accent); }
@@ -229,7 +230,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "22/10 14h09";
+const BUILD = "22/10 14h19";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -264,6 +265,7 @@ function render() {
   if (t.startsWith("q-") && QUIZ[t.slice(2)]) return quizIntro(QUIZ[t.slice(2)]);
   if (t.startsWith("f-") && FICHE[t.slice(2)]) return ficheView(FICHE[t.slice(2)]);
   if (t.startsWith("fa-") && FICHE[t.slice(3)]) return ficheView(FICHE[t.slice(3)], true);
+  if (t.startsWith("fp-")) return piegeView(t.slice(3));
   if (t === "scan") return scanSubject();
   if (t === "progres") return progress();
   if (t === "agenda") return agendaView();
@@ -296,8 +298,9 @@ function home() {
   DATA.subjects.filter(mine).forEach(s => s.review.forEach(r => { if (r.status !== "acquis" && r.next && r.next <= TODAY) due.push({ s, r }); }));
   const todo = Object.values(QUIZ).filter(q => !q.score && mine(q.subject) && (q.title !== "Révisions avant contrôle" || testAhead(q.subject)));
   const redo = DATA.scans.filter(s => s.status === "à refaire");  // only what asks something of her
-  // Her « Ce que tu confonds encore » fiches, rewritten after each missed quiz: right under the test reminder.
-  const confond = DATA.subjects.filter(mine).map(s => FICHE[s.key + "-a-revoir"]).filter(f => f && liveCards(f, f.subject).length);
+  // Her « Ce que tu confonds encore » fiche (rewritten after each missed quiz) sits under the test reminder on
+  // test days only; the rest of the time her traps lead to it.
+  const confond = exam ? [FICHE[exam.matiere + "-a-revoir"]].filter(f => f && liveCards(f, f.subject).length) : [];
   const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : !(it.type === "controle" && it.done) && dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
   app.innerHTML = `${linkCard()}${askCard()}
     ${soon.length || edtLine(tomorrow) ? `<section class="card" data-m="agenda"><h2>À venir</h2>
@@ -312,7 +315,7 @@ function home() {
       : `<p class="empty">Rien à faire aujourd'hui. Bravo !</p>`}
     ${todo.length ? `<section class="list"><h2>${exam ? `Pour ton contrôle ${exam.date === TODAY ? "d'aujourd'hui" : "de demain"}` : "Quiz à faire"}</h2>${todo.slice(0, allQuiz ? todo.length : 2).map(quizRow).join("")}
       ${todo.length > 2 && !allQuiz ? `<button class="more" id="more">${todo.length > 3 ? `Voir les ${todo.length - 2} autres quiz` : "Voir l'autre quiz"}</button>` : ""}</section>` : ""}
-    ${piegesCard()}
+    ${piegesCard(exam && exam.matiere)}
     <button class="main" data-go="scan">Scanner un document</button>
     <section class="list"><h2>Tes matières</h2><div class="tiles">${DATA.subjects.map(s => `
       <button class="tile" data-m="${s.key}" data-go="m-${s.key}"><b>${esc(s.name)}</b>
@@ -323,19 +326,38 @@ function home() {
     <div class="tiles"><button class="sec" data-go="agenda">Ton agenda</button><button class="sec" data-go="progres">Tes progrès</button></div>
     <p class="small">Mis à jour le ${esc(DATA.updated)}.</p>`;
   wire(); wireAgenda(home); moreQuizzes(todo);
+  const mp = document.getElementById("morep");
+  if (mp) mp.onclick = () => { allPieges = true; home(); };
 }
 
 // Traps = her recurring mistakes, listed by the cloud job; one goes out after piegeWin right answers in a row.
 const WIN = () => DATA.piegeWin || 3;
 const activePieges = () => (DATA.pieges || []).filter(p => !p.done && SUBJ[p.m]);
 const pips = p => `<span class="pips" aria-label="${p.streak || 0} sur ${WIN()}">${Array.from({ length: WIN() }, (_, k) => `<i class="${k < (p.streak || 0) ? "on" : ""}"></i>`).join("")}</span>`;
-const piegeRow = p => `<li data-m="${p.m}"><span class="dot"></span><b>${esc(p.titre)}</b>${p.done ? `<span class="badge good">éteint ✓</span>` : pips(p)}<span class="small">${esc(p.regle)}</span></li>`;
-function piegesCard() {
-  const act = activePieges(), off = (DATA.pieges || []).filter(p => p.done).length;
+// On the home page a trap opens the « Ce que tu confonds encore » fiche of its subject, at the closest card.
+const piegeFiche = p => { const f = FICHE[p.m + "-a-revoir"]; return f && liveCards(f, f.subject).length ? f : null; };
+const piegeRow = (p, link) => `<li data-m="${p.m}"${link && piegeFiche(p) ? ` class="go" role="button" tabindex="0" data-go="fp-${esc(p.id)}"` : ""}><span class="dot"></span><b>${esc(p.titre)}</b>${p.done ? `<span class="badge good">éteint ✓</span>` : pips(p)}<span class="small">${esc(p.regle)}</span></li>`;
+// Test day: that subject's traps only. Otherwise every subject takes turns (weakest first), 6 shown, the rest unfold.
+let allPieges = false;
+function piegesCard(only) {
+  const act = activePieges().filter(p => !only || p.m === only), off = (DATA.pieges || []).filter(p => p.done).length;
   if (!act.length && !off) return "";
+  const by = {}; act.slice().sort((a, b) => (a.streak || 0) - (b.streak || 0)).forEach(p => (by[p.m] = by[p.m] || []).push(p));
+  const order = []; for (let k = 0; order.length < act.length; k++) Object.values(by).forEach(l => { if (l[k]) order.push(l[k]); });
+  const shown = allPieges ? order : order.slice(0, 6);
   return `<section class="card"><h2>Tes pièges</h2>
-    ${act.length ? `<ul class="pieges">${act.slice(0, 6).map(piegeRow).join("")}</ul>` : `<p class="empty">Aucun piège en cours. Bravo !</p>`}
-    <p class="small">${WIN()} réussites de suite éteignent un piège.${off ? ` Éteint${off > 1 ? "s" : ""} : ${off}.` : ""}</p></section>`;
+    ${act.length ? `<ul class="pieges">${shown.map(p => piegeRow(p, true)).join("")}</ul>` : `<p class="empty">Aucun piège en cours. Bravo !</p>`}
+    ${order.length > shown.length ? `<button class="more" id="morep">Voir ${order.length - shown.length > 1 ? `les ${order.length - shown.length} autres pièges` : "l'autre piège"}</button>` : ""}
+    <p class="small">${WIN()} réussites de suite éteignent un piège.${act.some(piegeFiche) ? " Touche un piège pour revoir la règle." : ""}${off ? ` Éteint${off > 1 ? "s" : ""} : ${off}.` : ""}</p></section>`;
+}
+function piegeView(id) {
+  const p = (DATA.pieges || []).find(x => x.id === id), f = p && piegeFiche(p);
+  if (!f) return home();
+  const words = t => new Set((t.toLowerCase().match(/[a-zàâçéèêëîïôûùüÿœæäöß]{3,}/g) || []));
+  const want = words(p.titre + " " + p.regle), cards = liveCards(f, f.subject);
+  let best = 0, top = -1;
+  cards.forEach((c, k) => { const have = words(c.title + " " + JSON.stringify(c.items)); let n = 0; want.forEach(w => { if (have.has(w)) n++; }); if (n > top) { top = n; best = k; } });
+  ficheView(f, false, best);
 }
 
 // The rest of her quizzes unfold in place: one tap, no detour through each subject. The choice outlives
@@ -391,7 +413,7 @@ function cardHtml(c, k, n) {
   return `<article class="fcard"><div class="fhead">${esc(c.title)}<span>${k}/${n}</span></div><div class="fbody">${body}</div></article>`;
 }
 
-function ficheView(f, all) {
+function ficheView(f, all, start) {
   setFrame(f.title, f.subject.key, true);
   const live = liveCards(f, f.subject), cards = all || !live.length ? f.cards : live;
   app.innerHTML = `<div class="fcards" id="car">${cards.map((c, k) => cardHtml(c, k + 1, cards.length)).join("")}</div>
@@ -401,6 +423,7 @@ function ficheView(f, all) {
     const k = Math.round(car.scrollLeft / (car.firstElementChild.getBoundingClientRect().width + 12));
     pager.textContent = (k + 1) + " / " + cards.length;
   }, { passive: true });
+  if (start) { car.scrollLeft = start * (car.firstElementChild.getBoundingClientRect().width + 12); pager.textContent = (start + 1) + " / " + cards.length; }
 }
 
 // ---------- guided scan: subject -> kind -> photos taken right here ----------
