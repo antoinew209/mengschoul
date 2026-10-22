@@ -237,7 +237,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "22/10 16h05";
+const BUILD = "22/10 16h27";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -261,6 +261,7 @@ function badge(q) {
 
 // In-page navigation stack of tokens: "" | m-<subject> | q-<quiz id> | f-<fiche id> | scan | scan-<subject> | scan-<subject>-<kind>
 const stack = [];
+let updateReady = false;  // a new version is waiting: loaded when she is back on the home page
 function go(token) { if (token) stack.push(token); else stack.length = 0; render(); }
 back.onclick = () => { stack.pop(); render(); };
 
@@ -298,6 +299,7 @@ addEventListener("resize", fitTitle);
 function wire() { app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go)); }
 
 function home() {
+  if (updateReady) { updateReady = false; try { sessionStorage.setItem("upd-at", Date.now()); } catch (e) {} return location.reload(); }
   setFrame("Tes révisions", null, false);
   const tomorrow = new Date(Date.parse(TODAY + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
   // The day before and the day of a test, home offers only that subject: the rest stays in Tes matières.
@@ -1061,7 +1063,21 @@ loadData().catch(err => {
   if (ok) ok.onclick = () => { const v = document.getElementById("code").value.trim(); if (v) { location.hash = "k=" + v; location.reload(); } };
 });
 document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - fetchedAt > 120000) loadData().catch(() => {}); });
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+  // A new version was just downloaded: reload now if she is on the home page, else on her way back to it.
+  // A new service worker taking over (sw.js changed) means the same. At most once a minute, against a CDN
+  // that still serves the old copy here and there.
+  const hadSW = !!navigator.serviceWorker.controller;
+  const fresh = () => {
+    try { if (Date.now() - (+sessionStorage.getItem("upd-at") || 0) < 60000) return; } catch (e) {}
+    if (stack.length || typeof Z !== "undefined" && Z && document.getElementById("act")) { updateReady = true; return; }
+    try { sessionStorage.setItem("upd-at", Date.now()); } catch (e) {}
+    location.reload();
+  };
+  navigator.serviceWorker.addEventListener("message", e => { if (e.data === "updated") fresh(); });
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadSW) fresh(); });
+}
 // Bottom of the page: the app and her data are on this phone, so it opens in airplane mode.
 function airplaneBadge() {
   if (!("serviceWorker" in navigator)) return;
