@@ -83,6 +83,9 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .steps span { border-radius: 999px; padding: 2px 8px; background: var(--chip); color: var(--muted); white-space: nowrap; }
 .steps span.on { background: var(--ok-bg); color: var(--ok); }
 .due li.fait .grow { color: var(--muted); text-decoration: line-through; }
+.due.today li.sub { padding-left: 20px; font-size: 15px; margin-top: -4px; }
+.card h3.grp { font-family: var(--display); font-size: 16px; margin: 4px 0 -2px; color: var(--accent); }
+.due.today li.sub .grow { color: var(--muted); }
 .chev { color: var(--muted); font-weight: 700; }
 .lnk { cursor: pointer; }  /* a row that opens something (not the green .go button) */
 .empty { color: var(--muted); margin: 0; }
@@ -237,7 +240,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "22/10 16h27";
+const BUILD = "22/10 17h20";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -322,15 +325,17 @@ function home() {
     ${scansWaiting ? `<p class="small" id="scanwait">${scansWaiting > 1 ? `${scansWaiting} scans en attente` : "1 scan en attente"} d'envoi : ${scansWaiting > 1 ? "ils partiront" : "il partira"} dès que tu auras du réseau.</p>` : ""}
     ${confond.length ? `<section class="list">${confond.map(f => ficheRow(f, f.subject, false, true)).join("")}</section>` : ""}
     ${due.length ? `<section class="card"><h2>À réviser aujourd'hui</h2>
-      <ul class="due today">${due.map(d => `<li data-m="${d.s.key}" class="lnk${d.read && d.ok ? " fait" : ""}" role="button" tabindex="0" data-go="${themeGo(d.s, d.theme)}"><span class="dot"></span><span class="grow">${esc(d.theme)}${multi ? ` <span class="muted">· ${esc(d.s.name)}</span>` : ""}</span>
-        <span class="steps"><span class="${d.read ? "on" : ""}">Fiche${d.read ? " ✓" : ""}</span><span class="${d.ok ? "on" : ""}">Quiz${d.ok ? " ✓" : ""}</span></span></li>`).join("")}</ul>
-      ${allDone ? `<p class="sent ok">Tout est révisé pour aujourd'hui ✓</p>` : `${expressButtons(left)}
-      <p class="small">${left.length ? "Touche une notion pour relire sa fiche, puis fais le quiz express : chaque notion se coche." : "Quiz réussi ! Touche les notions sans « Fiche ✓ » pour relire leur fiche."}</p>`}</section>`
+      ${[...new Set(due.map(d => d.s))].map(sub => `${multi ? `<h3 class="grp" data-m="${sub.key}">${esc(sub.name)}</h3>` : ""}
+      <ul class="due today">${due.filter(d => d.s === sub).map(d => `<li data-m="${d.s.key}" class="lnk${d.read && d.ok ? " fait" : ""}" role="button" tabindex="0" data-go="${d.trapOnly ? "fp-" + esc(d.trapOnly.id) : themeGo(d.s, d.theme)}"><span class="dot"></span><span class="grow">${esc(d.theme)}</span>
+        <span class="steps"><span class="${d.read ? "on" : ""}">Fiche${d.read ? " ✓" : ""}</span><span class="${d.ok ? "on" : ""}">Quiz${d.ok ? " ✓" : ""}</span></span></li>
+        ${d.traps.map(p => `<li class="lnk sub" data-m="${p.m}" role="button" tabindex="0" data-go="fp-${esc(p.id)}"><span class="grow">↳ ${esc(p.titre)}</span>${pips(p)}</li>`).join("")}`).join("")}</ul>
+      ${allDone ? "" : expressButton(sub, left, multi)}`).join("")}
+      ${allDone ? `<p class="sent ok">Tout est révisé pour aujourd'hui ✓</p>` : `
+      <p class="small">${left.length ? "Touche une notion ou un piège (↳) pour relire sa fiche, puis fais le quiz express : chaque notion se coche." : "Quiz réussi ! Touche les notions sans « Fiche ✓ » pour relire leur fiche."}</p>`}</section>`
       : todo.length ? `<p class="empty">Rien à revoir, ${todo.length} quiz ${todo.length > 1 ? "t'attendent" : "t'attend"}.</p>`
       : `<p class="empty">Rien à faire aujourd'hui. Bravo !</p>`}
     ${todo.length ? `<section class="list"><h2>${exam ? `Pour ton contrôle ${exam.date === TODAY ? "d'aujourd'hui" : "de demain"}` : "Quiz à faire"}</h2>${todo.slice(0, allQuiz ? todo.length : 2).map(quizRow).join("")}
       ${todo.length > 2 && !allQuiz ? `<button class="more" id="more">${todo.length > 3 ? `Voir les ${todo.length - 2} autres quiz` : "Voir l'autre quiz"}</button>` : ""}</section>` : ""}
-    ${piegesCard(exam && exam.matiere)}
     <button class="main" data-go="scan">Scanner un document</button>
     <section class="list"><h2>Tes matières</h2><div class="tiles">${DATA.subjects.map(s => `
       <button class="tile" data-m="${s.key}" data-go="m-${s.key}"><b>${esc(s.name)}</b>
@@ -345,8 +350,7 @@ function home() {
     const sub = SUBJ[b.dataset.x], q = expressQuiz(sub, left.filter(d => d.s === sub).map(d => d.theme));
     QUIZ[q.id] = q; go("q-" + q.id);
   });
-  const mp = document.getElementById("morep");
-  if (mp) mp.onclick = () => { allPieges = true; home(); };
+
 }
 
 // Traps = her recurring mistakes, listed by the cloud job; one goes out after piegeWin right answers in a row.
@@ -425,8 +429,14 @@ function todayDue(mine) {
   const st = dayState();
   DATA.subjects.forEach(s => s.review.forEach(r => { const k = tk(s.key, r.theme); if (r.status !== "acquis" && r.next && r.next <= TODAY && !st.due.includes(k)) st.due.push(k); }));
   saveDay(st);
-  return st.due.map(k => { const [m, t] = k.split("|"), s = SUBJ[m]; return s && { s, theme: t, read: !!st.read[k] || !themeCard(s, t), ok: !!st.ok[k] }; })
-    .filter(d => d && mine(d.s));
+  const row = (s, t) => { const k = tk(s.key, t); return { s, theme: t, read: !!st.read[k] || !themeCard(s, t), ok: !!st.ok[k] }; };
+  const items = st.due.map(k => { const [m, t] = k.split("|"); return SUBJ[m] && row(SUBJ[m], t); }).filter(Boolean);
+  // A recurring mistake is worth a look every day: the notion of each active trap joins the list, weakest first,
+  // and the traps hang under their notion (one block for « what to revise » instead of two).
+  const traps = activePieges().slice().sort((a, b) => (a.streak || 0) - (b.streak || 0));
+  traps.forEach(p => { const s = SUBJ[p.m], t = p.t || p.titre; if (!items.some(d => d.s === s && d.theme === t)) items.push(Object.assign(row(s, t), { trapOnly: !p.t && p })); });
+  items.forEach(d => { d.traps = d.trapOnly ? [] : traps.filter(p => p.m === d.s.key && p.t === d.theme); });
+  return items.filter(d => mine(d.s));
 }
 function markRead(m, themes) { const st = dayState(); themes.forEach(t => { st.read[tk(m, t)] = 1; }); saveDay(st); }
 function markOk(m, per) { const st = dayState(); per.forEach(p => { if (p.n && p.ok / p.n >= .8) st.ok[tk(m, p.t)] = 1; }); saveDay(st); }
@@ -436,13 +446,16 @@ function expressQuiz(s, themes) {
   const pool = {}; themes.forEach(t => { pool[t] = []; });
   s.quizzes.forEach(q => q.questions.forEach(x => { if (pool[x.t]) pool[x.t].push({ ...x, lang: x.lang || q.lang }); }));
   const per = Math.max(2, Math.ceil(10 / themes.length));
-  const qs = shuffle(themes.flatMap(t => shuffle(pool[t]).slice(0, per))).slice(0, 12).map(x => { const v = variant(x, Math.random() < .5); delete v.base; return v; });
+  const traps = new Set(activePieges().map(p => p.id));  // questions on her active traps first
+  const pick = t => { const xs = shuffle(pool[t]); return [...xs.filter(x => traps.has(x.p)), ...xs.filter(x => !traps.has(x.p))].slice(0, per); };
+  const qs = shuffle(themes.flatMap(pick)).slice(0, 12).map(x => { const v = variant(x, Math.random() < .5); delete v.base; return v; });
   return { id: "express-" + s.key + "-" + Date.now(), title: "Quiz express", num: "x" + Date.now().toString(36), express: true, subject: s,
     lang: (s.quizzes[0] || {}).lang, intro: `${qs.length} questions sur tes notions du jour. Environ ${Math.max(3, Math.round(qs.length / 2))} minutes.`, questions: qs };
 }
-function expressButtons(left) {
-  const subs = [...new Set(left.map(d => d.s))].filter(s => s.quizzes.some(q => q.questions.some(x => left.some(d => d.s === s && d.theme === x.t))));
-  return subs.map(s => `<button class="main" data-x="${s.key}">${subs.length > 1 ? `Quiz express · ${esc(s.name)}` : "Réviser ces notions maintenant"}</button>`).join("");
+// Under each subject of the day: its quiz express, when its unticked notions have questions to draw from.
+function expressButton(s, left, multi) {
+  const has = s.quizzes.some(q => q.questions.some(x => left.some(d => d.s === s && d.theme === x.t)));
+  return has ? `<button class="main" data-x="${s.key}">${multi ? `Quiz express · ${esc(s.name)}` : "Réviser ces notions maintenant"}</button>` : "";
 }
 
 // Every notion leads somewhere: the fiche card that explains it (cards name their notions in `t`, the newest
@@ -594,6 +607,7 @@ function progress() {
       <div class="stat"><b>${Math.round(ok / n * 100)} %</b><span>de bonnes réponses</span></div>
       <div class="stat"><b>${acquis}/${themes.length}</b><span>notions acquises</span></div>
     </div>
+    ${piegesCard()}
     ${DATA.subjects.filter(s => s.quizzes.some(q => q.score)).map(s => {
       const qs = s.quizzes.filter(q => q.score).sort((a, b) => (parseInt(a.num, 10) || 0) - (parseInt(b.num, 10) || 0));
       const first = pct(qs[0].score), last = pct(qs[qs.length - 1].score);
@@ -612,6 +626,8 @@ function progress() {
         <p class="small">Barre = tes bonnes réponses sur tous les quiz. Une notion devient « acquise » quand tu la réussis plusieurs fois de suite.</p>
       </section>`;
     }).join("")}`;
+  const mp = document.getElementById("morep");
+  if (mp) mp.onclick = () => { allPieges = true; progress(); };
   wire();
 }
 function scanSubject() {
