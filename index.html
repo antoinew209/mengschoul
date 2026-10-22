@@ -240,7 +240,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "22/10 17h20";
+const BUILD = "22/10 17h34";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -325,11 +325,12 @@ function home() {
     ${scansWaiting ? `<p class="small" id="scanwait">${scansWaiting > 1 ? `${scansWaiting} scans en attente` : "1 scan en attente"} d'envoi : ${scansWaiting > 1 ? "ils partiront" : "il partira"} dès que tu auras du réseau.</p>` : ""}
     ${confond.length ? `<section class="list">${confond.map(f => ficheRow(f, f.subject, false, true)).join("")}</section>` : ""}
     ${due.length ? `<section class="card"><h2>À réviser aujourd'hui</h2>
-      ${[...new Set(due.map(d => d.s))].map(sub => `${multi ? `<h3 class="grp" data-m="${sub.key}">${esc(sub.name)}</h3>` : ""}
-      <ul class="due today">${due.filter(d => d.s === sub).map(d => `<li data-m="${d.s.key}" class="lnk${d.read && d.ok ? " fait" : ""}" role="button" tabindex="0" data-go="${d.trapOnly ? "fp-" + esc(d.trapOnly.id) : themeGo(d.s, d.theme)}"><span class="dot"></span><span class="grow">${esc(d.theme)}</span>
+      ${[...new Set(due.map(d => d.s))].map(sub => { const { all, shown } = dueShown(due, sub); return `${multi ? `<h3 class="grp" data-m="${sub.key}">${esc(sub.name)}</h3>` : ""}
+      <ul class="due today">${shown.map(d => `<li data-m="${d.s.key}" class="lnk${d.read && d.ok ? " fait" : ""}" role="button" tabindex="0" data-go="${d.trapOnly ? "fp-" + esc(d.trapOnly.id) : themeGo(d.s, d.theme)}"><span class="dot"></span><span class="grow">${esc(d.theme)}</span>
         <span class="steps"><span class="${d.read ? "on" : ""}">Fiche${d.read ? " ✓" : ""}</span><span class="${d.ok ? "on" : ""}">Quiz${d.ok ? " ✓" : ""}</span></span></li>
         ${d.traps.map(p => `<li class="lnk sub" data-m="${p.m}" role="button" tabindex="0" data-go="fp-${esc(p.id)}"><span class="grow">↳ ${esc(p.titre)}</span>${pips(p)}</li>`).join("")}`).join("")}</ul>
-      ${allDone ? "" : expressButton(sub, left, multi)}`).join("")}
+      ${all.length > shown.length ? `<button class="more" data-moredue="${sub.key}">${all.length - shown.length > 1 ? `Voir les ${all.length - shown.length} autres notions` : "Voir l'autre notion"}</button>` : ""}
+      ${allDone ? "" : expressButton(sub, shown.filter(d => !d.ok), multi)}`; }).join("")}
       ${allDone ? `<p class="sent ok">Tout est révisé pour aujourd'hui ✓</p>` : `
       <p class="small">${left.length ? "Touche une notion ou un piège (↳) pour relire sa fiche, puis fais le quiz express : chaque notion se coche." : "Quiz réussi ! Touche les notions sans « Fiche ✓ » pour relire leur fiche."}</p>`}</section>`
       : todo.length ? `<p class="empty">Rien à revoir, ${todo.length} quiz ${todo.length > 1 ? "t'attendent" : "t'attend"}.</p>`
@@ -347,9 +348,10 @@ function home() {
     <p class="small">Mis à jour le ${esc(DATA.updated)}.</p>`;
   wire(); wireAgenda(home); moreQuizzes(todo);
   app.querySelectorAll("[data-x]").forEach(b => b.onclick = () => {
-    const sub = SUBJ[b.dataset.x], q = expressQuiz(sub, left.filter(d => d.s === sub).map(d => d.theme));
+    const sub = SUBJ[b.dataset.x], q = expressQuiz(sub, dueShown(due, sub).shown.filter(d => !d.ok).map(d => d.theme));
     QUIZ[q.id] = q; go("q-" + q.id);
   });
+  app.querySelectorAll("[data-moredue]").forEach(b => b.onclick = () => { openDue.add(b.dataset.moredue); home(); });
 
 }
 
@@ -394,6 +396,15 @@ function piegeView(id) {
 // The rest of her quizzes unfold in place: one tap, no detour through each subject. The choice outlives
 // re-renders (the background data refresh redraws the home page a moment after it opens).
 let allQuiz = false;
+// « À réviser aujourd'hui » shows each subject's 3 most urgent notions: unticked first, those carrying her
+// traps ahead (weakest trap first), ticked ones last. The others unfold per subject; the choice outlives re-renders.
+const openDue = new Set();
+function dueShown(due, sub) {
+  const trapRank = d => d.traps.length ? Math.min(...d.traps.map(p => p.streak || 0)) : d.trapOnly ? d.trapOnly.streak || 0 : Infinity;
+  const all = due.filter(d => d.s === sub).map((d, i) => ({ d, i }))
+    .sort((a, b) => (a.d.read && a.d.ok) - (b.d.read && b.d.ok) || trapRank(a.d) - trapRank(b.d) || a.i - b.i).map(x => x.d);
+  return { all, shown: openDue.has(sub.key) ? all : all.slice(0, 3) };
+}
 function moreQuizzes(todo) {
   const b = document.getElementById("more");
   if (b) b.onclick = () => { allQuiz = true; b.outerHTML = todo.slice(2).map(quizRow).join(""); wire(); };
