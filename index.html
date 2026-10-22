@@ -237,7 +237,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "22/10 15h47";
+const BUILD = "22/10 16h05";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -351,9 +351,9 @@ function home() {
 const WIN = () => DATA.piegeWin || 3;
 const activePieges = () => (DATA.pieges || []).filter(p => !p.done && SUBJ[p.m]);
 const pips = p => `<span class="pips" aria-label="${p.streak || 0} sur ${WIN()}">${Array.from({ length: WIN() }, (_, k) => `<i class="${k < (p.streak || 0) ? "on" : ""}"></i>`).join("")}</span>`;
-// On the home page a trap opens the « Ce que tu confonds encore » fiche of its subject, at the closest card.
-const piegeFiche = p => { const f = FICHE[p.m + "-a-revoir"]; return f && liveCards(f, f.subject).length ? f : null; };
-const piegeRow = (p, link) => `<li data-m="${p.m}"${link && piegeFiche(p) ? ` class="lnk" role="button" tabindex="0" data-go="fp-${esc(p.id)}"` : ""}><span class="dot"></span><b>${esc(p.titre)}</b>${p.done ? `<span class="badge good">éteint ✓</span>` : pips(p)}<span class="small">${esc(p.regle)}</span></li>`;
+// On the home page every trap opens something: the closest card of its subject's fiches (« Ce que tu confonds
+// encore » first), or else the trap's own rule and example.
+const piegeRow = (p, link) => `<li data-m="${p.m}"${link ? ` class="lnk" role="button" tabindex="0" data-go="fp-${esc(p.id)}"` : ""}><span class="dot"></span><b>${esc(p.titre)}</b>${p.done ? `<span class="badge good">éteint ✓</span>` : pips(p)}<span class="small">${esc(p.regle)}</span></li>`;
 // Test day: that subject's traps only. Otherwise every subject takes turns (weakest first), 6 shown, the rest unfold.
 let allPieges = false;
 function piegesCard(only) {
@@ -365,16 +365,24 @@ function piegesCard(only) {
   return `<section class="card"><h2>Tes pièges</h2>
     ${act.length ? `<ul class="pieges">${shown.map(p => piegeRow(p, true)).join("")}</ul>` : `<p class="empty">Aucun piège en cours. Bravo !</p>`}
     ${order.length > shown.length ? `<button class="more" id="morep">Voir ${order.length - shown.length > 1 ? `les ${order.length - shown.length} autres pièges` : "l'autre piège"}</button>` : ""}
-    <p class="small">${WIN()} réussites de suite éteignent un piège.${act.some(piegeFiche) ? " Touche un piège pour revoir la règle." : ""}${off ? ` Éteint${off > 1 ? "s" : ""} : ${off}.` : ""}</p></section>`;
+    <p class="small">${WIN()} réussites de suite éteignent un piège.${act.length ? " Touche un piège pour revoir la règle." : ""}${off ? ` Éteint${off > 1 ? "s" : ""} : ${off}.` : ""}</p></section>`;
 }
 function piegeView(id) {
-  const p = (DATA.pieges || []).find(x => x.id === id), f = p && piegeFiche(p);
-  if (!f) return home();
+  const p = (DATA.pieges || []).find(x => x.id === id), s = p && SUBJ[p.m];
+  if (!s) return home();
   const words = t => new Set((t.toLowerCase().match(/[a-zàâçéèêëîïôûùüÿœæäöß]{3,}/g) || []));
-  const want = words(p.titre + " " + p.regle), cards = liveCards(f, f.subject);
-  let best = 0, top = -1;
-  cards.forEach((c, k) => { const have = words(c.title + " " + JSON.stringify(c.items)); let n = 0; want.forEach(w => { if (have.has(w)) n++; }); if (n > top) { top = n; best = k; } });
-  ficheView(f, false, best);
+  const want = words(p.titre + " " + p.regle);
+  const fiches = [FICHE[s.key + "-a-revoir"], ...s.fiches.map(f => FICHE[f.id])].filter((f, i, a) => f && a.indexOf(f) === i);
+  let best = null;
+  for (const f of fiches) {  // « Ce que tu confonds encore » wins when it has a card about it
+    liveCards(f, s).forEach((c, k) => {
+      const have = words(c.title + " " + JSON.stringify(c.items).replace(/\*\*/g, "")); let n = 0; want.forEach(w => { if (have.has(w)) n++; });
+      if (!best || n > best.n) best = { f, k, n };
+    });
+    if (best && best.n >= 2) return ficheView(best.f, false, best.k);
+  }
+  setFrame(p.titre, s.key, true);  // no card about it yet: its own rule and example
+  app.innerHTML = `<div class="fcards">${cardHtml({ title: p.titre, items: [["p", p.regle], ["p", p.exemple || ""]] }, 1, 1)}</div>`;
 }
 
 // The rest of her quizzes unfold in place: one tap, no detour through each subject. The choice outlives
