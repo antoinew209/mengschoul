@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Révisions">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png" sizes="192x192">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=swap">
@@ -56,6 +56,7 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .count { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 15px; white-space: nowrap; }
 .muted { color: var(--muted); }
 .small { color: var(--muted); font-size: 14px; margin: 0; }
+#avion { text-align: center; color: var(--muted); font-size: 13px; margin: 20px 0 8px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .tip { background: var(--chip); border-radius: 12px; padding: 10px 12px; font-size: 15px; display: flex; gap: 10px; align-items: flex-start; }
 .tip button { font: inherit; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 4px; font-size: 18px; }
@@ -225,6 +226,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
+const BUILD = "22/10 10h27";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -233,7 +235,7 @@ const h1 = document.getElementById("h1"), count = document.getElementById("count
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const rich = s => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\[(s|cod|coi)\](.+?)\[\/\1\]/g, '<span class="fn-$1">$2</span>');
 function index(d) {
-  DATA = d;
+  DATA = applyOutbox(d);  // ticks and results still waiting to be sent show as done
   SUBJ = Object.fromEntries(DATA.subjects.map(s => [s.key, s]));
   QUIZ = {}; FICHE = {};
   DATA.subjects.forEach(s => { s.quizzes.forEach(q => QUIZ[q.id] = { ...q, subject: s }); s.fiches.forEach(f => FICHE[f.id] = { ...f, subject: s }); });
@@ -434,7 +436,7 @@ function wireAgenda(again) {
     const it = DATA.agenda.items.find(i => i.id === b.dataset.ag);
     it.done = !it.done;
     store.set("data", JSON.stringify(DATA));
-    run("toggleAgenda", it.id, it.done).catch(() => {});
+    queue("toggleAgenda", [it.id, it.done], "ag-" + it.id);
     again();
   });
   app.querySelectorAll("[data-ans]").forEach(b => b.onclick = () => {
@@ -442,7 +444,7 @@ function wireAgenda(again) {
     Object.assign(it, it.ask.options[k].set || {});
     delete it.ask;
     store.set("data", JSON.stringify(DATA));
-    run("answerAgenda", it.id, k).catch(() => {});
+    queue("answerAgenda", [it.id, k], "ans-" + it.id);
     again();
   });
 }
@@ -753,20 +755,48 @@ const outbox = {
   all() { try { return JSON.parse(store.get("outbox")) || []; } catch (e) { return []; } },
   add(p) { store.set("outbox", JSON.stringify(outbox.all().filter(x => x.sid !== p.sid).concat([p]))); },
   drop(sid) { store.set("outbox", JSON.stringify(outbox.all().filter(x => x.sid !== sid))); },
+  // only that version: a newer tick on the same line, queued meanwhile, stays
+  done(p) { store.set("outbox", JSON.stringify(outbox.all().filter(x => x.sid !== p.sid || (x.at && x.at !== p.at)))); },
 };
+// Every write waits here: { sid, fn, args }. A quiz result is a saveResult payload (older entries have no fn).
+// One sid per agenda line, so only her last tick (or answer) on it is kept and sent.
+const opOf = p => p.fn ? p : { sid: p.sid, fn: "saveResult", args: [p] };
+const offline = err => !navigator.onLine || err instanceof TypeError || /fetch|network|load failed/i.test(String(err && err.message));
+function queue(fn, args, sid) {
+  const p = { sid: sid || Date.now() + "-" + fn, fn, args, at: Date.now() + Math.random() };
+  outbox.add(p);
+  if (pendingSave || flushing || outbox.all().length > 1) return flushOutbox();  // keep the order: earlier ones first
+  run(fn, ...args).then(() => outbox.done(p), err => { if (!offline(err)) outbox.done(p); });
+}
+const sumScore = sc => [Object.values(sc).reduce((a, x) => a + x[0], 0), Object.values(sc).reduce((a, x) => a + x[1], 0)];
+// What is still waiting is shown as done: a fresh or offline copy of the data must not undo her ticks and results.
+function applyOutbox(d) {
+  outbox.all().map(opOf).forEach(({ fn, args }) => {
+    const items = (d.agenda && d.agenda.items) || [];
+    if (fn === "toggleAgenda") { const it = items.find(i => i.id === args[0]); if (it) it.done = args[1]; }
+    else if (fn === "answerAgenda") { const it = items.find(i => i.id === args[0]); if (it && it.ask) { Object.assign(it, (it.ask.options[args[1]] || {}).set || {}); delete it.ask; } }
+    else if (fn === "saveResult") d.subjects.forEach(s => s.quizzes.forEach(q => { if (q.id === args[0].quiz && !q.score) q.score = sumScore(args[0].scores); }));
+  });
+  return d;
+}
 let flushing = false;
 function flushOutbox() {
-  const box = outbox.all();
+  const box = outbox.all().map(opOf);
   if (flushing || pendingSave || linkBad || !box.length) return;
   flushing = true;
-  box.reduce((pr, p) => pr.then(() => run("saveResult", p).then(r => {
-    outbox.drop(p.sid);
-    const q = QUIZ && QUIZ[p.quiz], sc = Object.values(p.scores);
-    if (r.recorded && q && !q.score) q.score = [sc.reduce((a, x) => a + x[0], 0), sc.reduce((a, x) => a + x[1], 0)];
+  let ok = false;
+  box.reduce((pr, p) => pr.then(() => run(p.fn, ...p.args).then(r => {
+    outbox.done(p);
+    const q = p.fn === "saveResult" && QUIZ && QUIZ[p.args[0].quiz];
+    if (q && r.recorded && !q.score) q.score = sumScore(p.args[0].scores);
+  }, err => {
+    if (/forbidden/.test(String(err && err.message))) linkBad = true;
+    if (offline(err) || linkBad) throw err;  // stop: the rest goes, in order, at the next try
+    outbox.done(p);  // refused by the server: it would be refused again
   })), Promise.resolve())
-    .then(() => typeof loadData === "function" ? loadData() : !stack.length && render())
-    .catch(err => { if (/forbidden/.test(String(err && err.message))) linkBad = true; })
-    .finally(() => { flushing = false; });
+    .then(() => { ok = true; return typeof loadData === "function" ? loadData() : !stack.length && render(); })
+    .catch(() => {})
+    .finally(() => { flushing = false; if (ok && outbox.all().length) setTimeout(flushOutbox, 300); });  // queued meanwhile
 }
 setTimeout(flushOutbox, 1500);
 addEventListener("online", flushOutbox);
@@ -843,6 +873,7 @@ function loadData() {
     const first = !DATA;
     store.set("data", JSON.stringify(d));
     index(d);
+    airplaneBadge();
     if (first || !stack.length) render();  // never yank her out of a quiz or a fiche
   });
 }
@@ -851,11 +882,24 @@ if (!DATA) app.innerHTML = `<p class="empty">Chargement…</p>`;
 loadData().catch(err => {
   if (DATA) { if (err.message === "forbidden") { linkBad = true; if (!stack.length) render(); } return; }
   app.innerHTML = !KEY || err.message === "forbidden"
-    ? `<section class="card"><h2>Ouvre ton lien</h2><p class="small" style="font-size:15px">Pour voir tes révisions, ouvre le lien personnel qu'on t'a envoyé.</p></section>`
+    ? `<section class="card"><h2>Ouvre ton lien</h2><p class="small" style="font-size:15px">Pour voir tes révisions, ouvre le lien personnel qu'on t'a envoyé, ou tape ton code ici.</p>
+        <input type="text" id="code" placeholder="Ton code" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="main" id="codeok">Valider</button></section>`
     : `<section class="card"><h2>Pas de connexion</h2><p class="small" style="font-size:15px">Vérifie ta connexion internet, puis réessaie.</p><button class="main" onclick="location.reload()">Réessayer</button></section>`;
+  const ok = document.getElementById("codeok");  // the home-screen icon has its own memory: the code is typed once there
+  if (ok) ok.onclick = () => { const v = document.getElementById("code").value.trim(); if (v) { location.hash = "k=" + v; location.reload(); } };
 });
 document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - fetchedAt > 120000) loadData().catch(() => {}); });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+// Bottom of the page: the app and her data are on this phone, so it opens in airplane mode.
+function airplaneBadge() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.ready.then(() => {
+    if (!store.get("data")) return;
+    const el = document.getElementById("avion") || document.body.appendChild(Object.assign(document.createElement("p"), { id: "avion" }));
+    el.textContent = "✓ Prêt pour le mode avion · version " + BUILD;
+  });
+}
+airplaneBadge();
 </script>
 </body>
 </html>
