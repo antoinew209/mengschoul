@@ -162,6 +162,9 @@ details > summary { cursor: pointer; font-family: var(--display); font-weight: 6
 .ag .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ag .meta .tag { padding: 2px 6px; }
 .ag .txt .mini { align-self: flex-start; margin-top: 6px; }
+.ag .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.ag .btns .mini { margin-top: 0; }
+.ag .mini.alt { background: transparent; color: var(--fg); border: 2px solid var(--line); }
 .ag.late .meta { color: var(--bad); font-weight: 700; }
 .ag.done b { text-decoration: line-through; color: var(--muted); }
 .chk { width: 30px; height: 30px; border-radius: 8px; border: 2px solid var(--accent); background: transparent; color: transparent; font: inherit; font-weight: 800; cursor: pointer; flex: none; }
@@ -226,7 +229,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "22/10 13h28";
+const BUILD = "22/10 14h09";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -285,15 +288,17 @@ function home() {
   setFrame("Tes révisions", null, false);
   const tomorrow = new Date(Date.parse(TODAY + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
   // The day before and the day of a test, home offers only that subject: the rest stays in Tes matières.
-  const exam = agItems().find(it => it.type === "controle" && SUBJ[it.matiere] && (it.date === TODAY || it.date === tomorrow));
+  const exam = agItems().find(it => it.type === "controle" && !it.done && SUBJ[it.matiere] && (it.date === TODAY || it.date === tomorrow));
+  // « Révisions avant contrôle » quizzes only while that subject still has a test ahead (not passed, not over).
+  const testAhead = s => agItems().some(it => it.type === "controle" && it.matiere === s.key && !it.done && dayDiff(it.date) >= 0);
   const mine = s => !exam || s.key === exam.matiere;
   const due = [];
   DATA.subjects.filter(mine).forEach(s => s.review.forEach(r => { if (r.status !== "acquis" && r.next && r.next <= TODAY) due.push({ s, r }); }));
-  const todo = Object.values(QUIZ).filter(q => !q.score && mine(q.subject));
+  const todo = Object.values(QUIZ).filter(q => !q.score && mine(q.subject) && (q.title !== "Révisions avant contrôle" || testAhead(q.subject)));
   const redo = DATA.scans.filter(s => s.status === "à refaire");  // only what asks something of her
   // Her « Ce que tu confonds encore » fiches, rewritten after each missed quiz: right under the test reminder.
   const confond = DATA.subjects.filter(mine).map(s => FICHE[s.key + "-a-revoir"]).filter(f => f && liveCards(f, f.subject).length);
-  const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
+  const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : !(it.type === "controle" && it.done) && dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
   app.innerHTML = `${linkCard()}${askCard()}
     ${soon.length || edtLine(tomorrow) ? `<section class="card" data-m="agenda"><h2>À venir</h2>
       ${soon.length ? `<ul class="due">${soon.map(agRow).join("")}</ul>` : `<p class="empty">Aucun devoir ni contrôle noté pour les 7 prochains jours.</p>`}
@@ -424,15 +429,24 @@ function askCard() {
 function agRow(it) {
   const s = SUBJ[it.matiere], d = dayDiff(it.date), late = d < 0 && !it.done;
   const prep = it.quiz && QUIZ[it.quiz] && !QUIZ[it.quiz].score;
-  const wait = it.type === "controle" && s && !it.quiz && d >= 0 && d <= 3;
+  const wait = it.type === "controle" && s && !it.quiz && !it.done && d >= 0 && d <= 3;
+  const passed = it.type === "controle" && !it.done && d <= 0;  // test day: she says it is behind her
   const what = s ? s.name : it.autre;
   return `<li class="ag${it.done ? " done" : ""}${late ? " late" : ""}" data-m="${s ? s.key : "agenda"}">
     ${it.type === "devoir" ? `<button class="chk" data-ag="${esc(it.id)}" aria-pressed="${!!it.done}" aria-label="Fait">✓</button>` : ""}
     <span class="txt"><span class="meta">${it.type === "devoir" ? "" : `<span class="tag">${it.type === "controle" ? "Contrôle" : "Info"}</span>`}<span>${what ? esc(what) + " · " : ""}${dayLabel(it.date)}</span></span>
       <b>${esc(it.title)}</b>${it.details ? `<small>${esc(it.details)}</small>` : ""}${wait ? `<small>Quiz de révision en préparation</small>` : ""}
-      ${prep ? `<button class="mini" data-go="q-${esc(it.quiz)}">Réviser</button>` : ""}</span></li>`;
+      ${prep || passed ? `<span class="btns">${prep && !it.done ? `<button class="mini" data-go="q-${esc(it.quiz)}">Réviser</button>` : ""}${passed ? `<button class="mini alt" data-passed="${esc(it.id)}">Contrôle passé ✓</button>` : ""}</span>` : ""}</span></li>`;
 }
 function wireAgenda(again) {
+  // Test behind her: the reminder, the test-only home and its revision quizzes go away.
+  app.querySelectorAll("[data-passed]").forEach(b => b.onclick = () => {
+    const it = DATA.agenda.items.find(i => i.id === b.dataset.passed);
+    it.done = true;
+    store.set("data", JSON.stringify(DATA));
+    queue("toggleAgenda", [it.id, true], "ag-" + it.id);
+    again();
+  });
   app.querySelectorAll("[data-ag]").forEach(b => b.onclick = () => {
     const it = DATA.agenda.items.find(i => i.id === b.dataset.ag);
     it.done = !it.done;
