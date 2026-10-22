@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Mes révisions</title>
+<title>Tes révisions</title>
 <meta name="theme-color" content="#161514">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -211,7 +211,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--gold); outline-
 </head>
 <body>
 <div class="wrap" id="root">
-  <header><button class="back" id="back" aria-label="Retour" hidden>←</button><h1 id="h1">Mes révisions</h1><span class="count" id="count"></span></header>
+  <header><button class="back" id="back" aria-label="Retour" hidden>←</button><h1 id="h1">Tes révisions</h1><span class="count" id="count"></span></header>
   <main id="app"></main>
 </div>
 
@@ -226,7 +226,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "22/10 12h24";
+const BUILD = "22/10 13h28";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -282,16 +282,16 @@ addEventListener("resize", fitTitle);
 function wire() { app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go)); }
 
 function home() {
-  setFrame("Mes révisions", null, false);
+  setFrame("Tes révisions", null, false);
   const tomorrow = new Date(Date.parse(TODAY + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
-  // The day before and the day of a test, home offers only that subject: the rest stays in Mes matières.
+  // The day before and the day of a test, home offers only that subject: the rest stays in Tes matières.
   const exam = agItems().find(it => it.type === "controle" && SUBJ[it.matiere] && (it.date === TODAY || it.date === tomorrow));
   const mine = s => !exam || s.key === exam.matiere;
   const due = [];
   DATA.subjects.filter(mine).forEach(s => s.review.forEach(r => { if (r.status !== "acquis" && r.next && r.next <= TODAY) due.push({ s, r }); }));
   const todo = Object.values(QUIZ).filter(q => !q.score && mine(q.subject));
   const redo = DATA.scans.filter(s => s.status === "à refaire");  // only what asks something of her
-  // Her « Ce que je confonds encore » fiches, rewritten after each missed quiz: right under the test reminder.
+  // Her « Ce que tu confonds encore » fiches, rewritten after each missed quiz: right under the test reminder.
   const confond = DATA.subjects.filter(mine).map(s => FICHE[s.key + "-a-revoir"]).filter(f => f && liveCards(f, f.subject).length);
   const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
   app.innerHTML = `${linkCard()}${askCard()}
@@ -309,13 +309,13 @@ function home() {
       ${todo.length > 2 && !allQuiz ? `<button class="more" id="more">${todo.length > 3 ? `Voir les ${todo.length - 2} autres quiz` : "Voir l'autre quiz"}</button>` : ""}</section>` : ""}
     ${piegesCard()}
     <button class="main" data-go="scan">Scanner un document</button>
-    <section class="list"><h2>Mes matières</h2><div class="tiles">${DATA.subjects.map(s => `
+    <section class="list"><h2>Tes matières</h2><div class="tiles">${DATA.subjects.map(s => `
       <button class="tile" data-m="${s.key}" data-go="m-${s.key}"><b>${esc(s.name)}</b>
       <span>${((n) => `${n} fiche${n > 1 ? "s" : ""}`)(s.fiches.filter(f => liveCards(f, s).length).length)} · ${s.quizzes.length} quiz</span></button>`).join("")}</div></section>
     ${redo.length ? `<section class="card"><h2>Scan à refaire</h2><ul class="due">${redo.map(s => `
       <li><span class="badge ${s.status === "à refaire" ? "low" : s.status === "traité" ? "good" : "mid"}">${esc(s.status)}</span>
       <span>${esc(s.label)}${s.note ? `<br><span class="small">${esc(s.note)}</span>` : ""}</span></li>`).join("")}</ul></section>` : ""}
-    <div class="tiles"><button class="sec" data-go="agenda">Mon agenda</button><button class="sec" data-go="progres">Mes progrès</button></div>
+    <div class="tiles"><button class="sec" data-go="agenda">Ton agenda</button><button class="sec" data-go="progres">Tes progrès</button></div>
     <p class="small">Mis à jour le ${esc(DATA.updated)}.</p>`;
   wire(); wireAgenda(home); moreQuizzes(todo);
 }
@@ -328,7 +328,7 @@ const piegeRow = p => `<li data-m="${p.m}"><span class="dot"></span><b>${esc(p.t
 function piegesCard() {
   const act = activePieges(), off = (DATA.pieges || []).filter(p => p.done).length;
   if (!act.length && !off) return "";
-  return `<section class="card"><h2>Mes pièges</h2>
+  return `<section class="card"><h2>Tes pièges</h2>
     ${act.length ? `<ul class="pieges">${act.slice(0, 6).map(piegeRow).join("")}</ul>` : `<p class="empty">Aucun piège en cours. Bravo !</p>`}
     <p class="small">${WIN()} réussites de suite éteignent un piège.${off ? ` Éteint${off > 1 ? "s" : ""} : ${off}.` : ""}</p></section>`;
 }
@@ -364,7 +364,7 @@ function subjectView(s) {
     ${s.fiches.length ? `<section class="list"><h2>Fiches</h2>${live.map(f => ficheRow(f, s)).join("")}${live.length ? "" : `<p class="empty">Toutes tes fiches sont maîtrisées. Bravo !</p>`}
       ${done.length ? `<button class="more" id="donef">Voir ${done.length > 1 ? `les ${done.length} fiches maîtrisées` : "la fiche maîtrisée"}</button>` : ""}</section>` : ""}
     <section class="list"><h2>Quiz</h2>${s.quizzes.length ? s.quizzes.map(quizRow).join("") : `<p class="empty">Pas encore de quiz. Scanne un cours pour en avoir un.</p>`}</section>
-    ${s.review.length ? `<section class="card"><h2>Mes notions</h2><ul class="due">${s.review.map(r => `
+    ${s.review.length ? `<section class="card"><h2>Tes notions</h2><ul class="due">${s.review.map(r => `
       <li><span class="badge ${r.status === "acquis" ? "good" : r.status === "en cours" ? "mid" : "low"}">${esc(r.status)}</span><span>${esc(r.theme)}</span></li>`).join("")}</ul></section>` : ""}`;
   const b = document.getElementById("donef");
   if (b) b.onclick = () => { b.outerHTML = done.map(f => ficheRow(f, s, true)).join(""); wire(); };
@@ -400,7 +400,7 @@ function ficheView(f, all) {
 
 // ---------- guided scan: subject -> kind -> photos taken right here ----------
 const KINDS = { cours: "Un cours ou des exercices", controle: "Un contrôle ou un devoir corrigé" };
-const AG_KINDS = { carnet: "Mon carnet, mes devoirs, une date de contrôle", edt: "Mon emploi du temps" };
+const AG_KINDS = { carnet: "Ton carnet, tes devoirs, une date de contrôle", edt: "Ton emploi du temps" };
 const AGENDA = { key: "agenda", name: "Agenda" };
 const kindsOf = key => key === "agenda" ? AG_KINDS : KINDS;
 
@@ -455,19 +455,19 @@ function edtLine(iso) {
   return e && e.length ? edtChips(e) : "";
 }
 function agendaView() {
-  setFrame("Mon agenda", null, true);
+  setFrame("Ton agenda", null, true);
   const items = agItems().filter(it => dayDiff(it.date) >= 0 || (it.type === "devoir" && !it.done && dayDiff(it.date) >= -14));
   const edt = DATA.agenda && DATA.agenda.edt;
   app.innerHTML = `${askCard()}<section class="card" data-m="agenda"><h2>Devoirs et contrôles</h2>
       ${items.length ? `<ul class="due">${items.map(agRow).join("")}</ul>` : `<p class="empty">Rien de noté. Scanne ton carnet pour remplir ton agenda.</p>`}</section>
-    ${edt ? `<section class="card"><h2>Mon emploi du temps</h2>${["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"].filter(d => edt[d] && edt[d].length).map(d => `
+    ${edt ? `<section class="card"><h2>Ton emploi du temps</h2>${["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"].filter(d => edt[d] && edt[d].length).map(d => `
       <div class="list"><b>${d[0].toUpperCase() + d.slice(1)}</b>${edtChips(edt[d])}</div>`).join("")}</section>` : ""}
-    <button class="sec" data-go="scan-agenda">Scanner mon carnet ou mon emploi du temps</button>`;
+    <button class="sec" data-go="scan-agenda">Scanner ton carnet ou ton emploi du temps</button>`;
   wire(); wireAgenda(agendaView);
 }
 let SCAN = null;
 function progress() {
-  setFrame("Mes progrès", null, true);
+  setFrame("Tes progrès", null, true);
   const done = DATA.subjects.flatMap(s => s.quizzes.filter(q => q.score).map(q => ({ s, q })));
   const themes = DATA.subjects.flatMap(s => s.review);
   if (!done.length) { app.innerHTML = `<p class="empty">Fais ton premier quiz : tes progrès apparaîtront ici.</p>`; return wire(); }
@@ -491,7 +491,7 @@ function progress() {
           ${qs.map(q => `<div class="col"><i>${pct(q.score)} %</i><div class="${pct(q.score) >= 80 ? "goal-ok" : pct(q.score) < 60 ? "low" : ""}" style="height:${Math.max(pct(q.score), 3)}%"></div></div>`).join("")}</div>
         <div class="cols-x">${qs.map(q => `<span>n°${esc(q.num)}</span>`).join("")}</div>
         <p class="small">${msg}</p>
-        <h2>Mes notions</h2>
+        <h2>Tes notions</h2>
         <div class="list">${s.review.slice().sort((a, b) => b.level - a.level || a.theme.localeCompare(b.theme)).map(r => `
           <div class="trow"><span>${esc(r.theme)}</span><span class="n">${r.n ? `${r.ok}/${r.n} · ` : ""}${esc(r.status)}</span>
           <div class="bar"><div style="width:${r.n ? Math.round(r.ok / r.n * 100) : 0}%;background:${bar(r)}"></div></div></div>`).join("")}</div>
@@ -504,7 +504,7 @@ function scanSubject() {
   setFrame("Scanner", null, true);
   app.innerHTML = `<section class="card"><h2>1. C'est pour quoi ?</h2>
     <div class="tiles">${DATA.subjects.filter(s => s.scan !== false).map(s => `<button class="tile" data-m="${s.key}" data-go="scan-${s.key}"><b>${esc(s.name)}</b></button>`).join("")}
-    <button class="tile" data-m="agenda" data-go="scan-agenda"><b>Mon agenda</b><span>carnet, devoirs, emploi du temps</span></button></div></section>`;
+    <button class="tile" data-m="agenda" data-go="scan-agenda"><b>Ton agenda</b><span>carnet, devoirs, emploi du temps</span></button></div></section>`;
   wire();
 }
 function scanStep(rest) {
@@ -631,7 +631,7 @@ async function keepScan(s, pages) {
   await scanBox.put({ id: Date.now() + "-" + SCAN.key, key: SCAN.key, kind: SCAN.kind, pages, at: Date.now() });
   SCAN = null; scansWaiting++;
   app.innerHTML = `<section class="card"><h2>Scan gardé sur ton téléphone</h2><p style="margin:0">Pas de réseau pour l'instant : il partira tout seul dès que tu auras du réseau.</p>
-    <button class="main" id="home">Retour à mes révisions</button></section>`;
+    <button class="main" id="home">Retour à tes révisions</button></section>`;
   document.getElementById("home").onclick = () => go("");
 }
 async function sendScan(s) {
@@ -649,7 +649,7 @@ async function sendScan(s) {
     SCAN = null;
     scanDone(s.key, scan, soon);
     app.innerHTML = `<section class="card"><h2>C'est envoyé !</h2><p style="margin:0">${s.key === "agenda" ? `Tes devoirs et contrôles apparaîtront dans « À venir » ${soon ? "d'ici un quart d'heure environ" : "ce soir"}.` : soon ? "Ta fiche et ton quiz sont en préparation : rouvre cette page dans un quart d'heure environ." : "Tes fiches et ton quiz arrivent ici ce soir."}</p>
-      <button class="main" id="again">Scanner autre chose</button><button class="sec" id="home">Retour à mes révisions</button></section>`;
+      <button class="main" id="again">Scanner autre chose</button><button class="sec" id="home">Retour à tes révisions</button></section>`;
     document.getElementById("again").onclick = () => go("scan");
     document.getElementById("home").onclick = () => go("");
   } catch (err) {
@@ -793,7 +793,7 @@ function check() {
     ? `<div class="fb ok"><strong>Juste !</strong>${esc(q.r)}${pg}</div>`
     : `<div class="fb ko"><strong>Réponse : ${esc(right)}</strong>${why ? `<span class="why">${esc(why)}</span><span class="rule">À retenir : ${esc(q.r)}</span>` : esc(q.r)}${pg}</div>`;
   const act = document.getElementById("act");
-  act.textContent = i < Z.qs.length - 1 ? "Suivant" : Z.retry ? "Terminer" : "Voir mon résultat";
+  act.textContent = i < Z.qs.length - 1 ? "Suivant" : Z.retry ? "Terminer" : "Voir ton résultat";
   act.focus();
 }
 function next() { Z.i++; Z.i < Z.qs.length ? show() : Z.retry ? retryDone() : result(); }
@@ -803,7 +803,7 @@ function retryDone() {
   app.innerHTML = `<section class="card"><p class="score">${total}<small> / ${total}</small></p>
     <p style="margin:0"><b>Tout corrigé !</b> Tu as rattrapé ${total > 1 ? `tes ${total} erreurs` : "ton erreur"}. Elles reviendront dans tes prochains quiz pour vérifier que c'est acquis.</p></section>
     ${linkCard()}${pendingSave && !linkBad ? `<section class="card"><p class="sent ko" id="sent">Ton résultat n'est pas encore enregistré (pas de connexion). <button class="sec" id="resend" style="margin-top:6px">Réessayer</button></p></section>` : ""}
-    <button class="main" id="home">Retour à mes révisions</button>`;
+    <button class="main" id="home">Retour à tes révisions</button>`;
   if (pendingSave && !linkBad) document.getElementById("resend").onclick = pendingSave;
   document.getElementById("home").onclick = () => go("");
 }
@@ -890,10 +890,10 @@ function result() {
       <div id="pgres"></div>
       <p class="sent" id="sent">Enregistrement de ton résultat…</p>
     </section>
-    ${errs.length ? `<button class="main" id="retry">Corriger mes ${errs.length > 1 ? errs.length + " erreurs" : "erreur"}</button>
+    ${errs.length ? `<button class="main" id="retry">Corriger tes ${errs.length > 1 ? errs.length + " erreurs" : "erreur"}</button>
     <details class="card"><summary>À revoir (${errs.length})</summary><ol class="errs">${errs.map(e => `<li>${esc(e.q)}<br><s>${esc(e.given)}</s> → <b>${esc(e.right)}</b></li>`).join("")}</ol></details>` : ""}
     <button class="sec" id="again">Refaire le quiz</button>
-    <button class="sec" id="home">Retour à mes révisions</button>`;
+    <button class="sec" id="home">Retour à tes révisions</button>`;
   if (errs.length) document.getElementById("retry").onclick = () => secondChance(quiz, errs.map(e => e.src));
   document.getElementById("again").onclick = () => { Z = { quiz, qs: quiz.questions, i: 0, answers: [] }; show(); };
   document.getElementById("home").onclick = () => go("");
