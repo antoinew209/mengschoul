@@ -226,7 +226,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "22/10 10h27";
+const BUILD = "22/10 12h24";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -298,6 +298,7 @@ function home() {
     ${soon.length || edtLine(tomorrow) ? `<section class="card" data-m="agenda"><h2>À venir</h2>
       ${soon.length ? `<ul class="due">${soon.map(agRow).join("")}</ul>` : `<p class="empty">Aucun devoir ni contrôle noté pour les 7 prochains jours.</p>`}
       ${edtLine(tomorrow) ? `<p class="small">Demain (${dayName(tomorrow)}) :</p>${edtLine(tomorrow)}` : ""}</section>` : ""}
+    ${scansWaiting ? `<p class="small" id="scanwait">${scansWaiting > 1 ? `${scansWaiting} scans en attente` : "1 scan en attente"} d'envoi : ${scansWaiting > 1 ? "ils partiront" : "il partira"} dès que tu auras du réseau.</p>` : ""}
     ${confond.length ? `<section class="list">${confond.map(f => ficheRow(f, f.subject, false, true)).join("")}</section>` : ""}
     ${due.length ? `<section class="card"><h2>À réviser aujourd'hui</h2>
       <ul class="due">${due.map(({ s, r }) => `<li data-m="${s.key}"><span class="dot"></span><span>${esc(r.theme)} <span class="muted">· ${esc(s.name)}</span></span></li>`).join("")}</ul>
@@ -576,33 +577,91 @@ function toJpeg(file) {
 }
 const run = (fn, ...args) => fetch(EXEC, { method: "POST", body: JSON.stringify({ key: KEY, fn, args }) })
   .then(r => r.json()).then(r => { if (r.error) throw new Error(r.error); return r.result; });
+// Scans waiting for the network. Photos are too big for localStorage: IndexedDB keeps them, airplane mode included.
+const scanBox = {
+  db() {
+    return this._db || (this._db = new Promise((ok, ko) => {
+      const r = indexedDB.open("ms-scans", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("scans", { keyPath: "id" });
+      r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error);
+    }));
+  },
+  tx(mode, fn) {
+    return this.db().then(db => new Promise((ok, ko) => {
+      const t = db.transaction("scans", mode), req = fn(t.objectStore("scans"));
+      t.oncomplete = () => ok(req.result); t.onerror = () => ko(t.error);
+    }));
+  },
+  put(x) { return this.tx("readwrite", st => st.put(x)); },
+  all() { return this.tx("readonly", st => st.getAll()); },
+  del(id) { return this.tx("readwrite", st => st.delete(id)); },
+};
+let scansWaiting = 0;
+async function uploadScan(key, kind, pages, onPage) {
+  const scan = await run("startScan", key, kind), ids = [];
+  for (let i = 0; i < pages.length; i++) { if (onPage) onPage(i); ids.push(await run("addScanPage", scan, i + 1, pages[i])); }
+  return { scan, fin: await run("finishScan", scan, ids) };
+}
+const scanDone = (key, scan, soon) => DATA.scans.unshift({ label: `${(key === "agenda" ? AGENDA : SUBJ[key] || { name: key }).name} · ${scan.kind}, aujourd'hui`, status: "reçu", note: soon ? "En préparation, prêt dans un quart d'heure environ." : "Traité ce soir." });
+let scanFlushing = false;
+// Sent oldest first; a cut connection keeps the scan (it goes again whole, at worst twice).
+async function flushScans() {
+  if (scanFlushing || linkBad || !window.indexedDB) return;
+  scanFlushing = true;
+  let box = [];
+  try {
+    box = (await scanBox.all()).sort((a, b) => a.at - b.at);
+    scansWaiting = box.length;
+    for (const it of box) {
+      if (!navigator.onLine) break;
+      try {
+        const { scan, fin } = await uploadScan(it.key, it.kind, it.pages);
+        await scanBox.del(it.id); scansWaiting--;
+        scanDone(it.key, scan, fin && fin.instant);
+      } catch (err) { if (/forbidden/.test(String(err && err.message))) linkBad = true; break; }  // kept for the next try
+    }
+  } catch (e) {}
+  scanFlushing = false;
+  if (box.length && !stack.length) render();  // the « scan en attente » line comes or goes
+}
+setTimeout(flushScans, 2000);
+addEventListener("online", flushScans);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) flushScans(); });
+async function keepScan(s, pages) {
+  await scanBox.put({ id: Date.now() + "-" + SCAN.key, key: SCAN.key, kind: SCAN.kind, pages, at: Date.now() });
+  SCAN = null; scansWaiting++;
+  app.innerHTML = `<section class="card"><h2>Scan gardé sur ton téléphone</h2><p style="margin:0">Pas de réseau pour l'instant : il partira tout seul dès que tu auras du réseau.</p>
+    <button class="main" id="home">Retour à mes révisions</button></section>`;
+  document.getElementById("home").onclick = () => go("");
+}
 async function sendScan(s) {
   const pages = SCAN.pages.slice();
+  if (!navigator.onLine && window.indexedDB) return keepScan(s, pages).catch(() => failScan(s, pages));
   app.innerHTML = `<section class="card"><h2>Envoi en cours…</h2><div class="progress"><div id="bar"></div></div><p class="small" id="st">Ne ferme pas la page.</p></section>`;
   const bar = document.getElementById("bar"), st = document.getElementById("st");
   try {
-    const scan = await run("startScan", SCAN.key, SCAN.kind);
-    const ids = [];
-    for (let i = 0; i < pages.length; i++) {
+    const { scan, fin } = await uploadScan(SCAN.key, SCAN.kind, pages, i => {
       st.textContent = `Page ${i + 1} sur ${pages.length}…`;
-      ids.push(await run("addScanPage", scan, i + 1, pages[i]));
-      bar.style.width = ((i + 1) / (pages.length + 1) * 100) + "%";
-    }
-    const fin = await run("finishScan", scan, ids);
+      bar.style.width = (i / (pages.length + 1) * 100) + "%";
+    });
     const soon = fin && fin.instant;
     bar.style.width = "100%";
     SCAN = null;
-    DATA.scans.unshift({ label: `${s.name} · ${scan.kind}, aujourd'hui`, status: "reçu", note: soon ? "En préparation, prêt dans un quart d'heure environ." : "Traité ce soir." });
+    scanDone(s.key, scan, soon);
     app.innerHTML = `<section class="card"><h2>C'est envoyé !</h2><p style="margin:0">${s.key === "agenda" ? `Tes devoirs et contrôles apparaîtront dans « À venir » ${soon ? "d'ici un quart d'heure environ" : "ce soir"}.` : soon ? "Ta fiche et ton quiz sont en préparation : rouvre cette page dans un quart d'heure environ." : "Tes fiches et ton quiz arrivent ici ce soir."}</p>
       <button class="main" id="again">Scanner autre chose</button><button class="sec" id="home">Retour à mes révisions</button></section>`;
     document.getElementById("again").onclick = () => go("scan");
     document.getElementById("home").onclick = () => go("");
   } catch (err) {
-    app.innerHTML = `<section class="card"><h2>L'envoi n'a pas marché</h2><p class="small" style="font-size:15px">Vérifie ta connexion, puis réessaie. Tes photos sont gardées.</p>
-      <button class="main go" id="retry">Réessayer</button></section>`;
-    SCAN.pages = pages;
-    document.getElementById("retry").onclick = () => sendScan(s);
+    if (offline(err) && window.indexedDB) return keepScan(s, pages).catch(() => failScan(s, pages));
+    failScan(s, pages);
   }
+}
+function failScan(s, pages) {
+  app.innerHTML = `<section class="card"><h2>L'envoi n'a pas marché</h2><p class="small" style="font-size:15px">Vérifie ta connexion, puis réessaie. Tes photos sont gardées.</p>
+    <button class="main go" id="retry">Réessayer</button></section>`;
+  SCAN.pages = pages;
+  document.getElementById("retry").onclick = () => sendScan(s);
 }
 
 // ---------- quiz engine ----------
