@@ -284,11 +284,14 @@ function home() {
   DATA.subjects.filter(mine).forEach(s => s.review.forEach(r => { if (r.status !== "acquis" && r.next && r.next <= TODAY) due.push({ s, r }); }));
   const todo = Object.values(QUIZ).filter(q => !q.score && mine(q.subject));
   const redo = DATA.scans.filter(s => s.status === "à refaire");  // only what asks something of her
+  // Her « Ce que je confonds encore » fiches, rewritten after each missed quiz: right under the test reminder.
+  const confond = DATA.subjects.filter(mine).map(s => FICHE[s.key + "-a-revoir"]).filter(f => f && liveCards(f, f.subject).length);
   const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
   app.innerHTML = `${linkCard()}${askCard()}
     ${soon.length || edtLine(tomorrow) ? `<section class="card" data-m="agenda"><h2>À venir</h2>
       ${soon.length ? `<ul class="due">${soon.map(agRow).join("")}</ul>` : `<p class="empty">Aucun devoir ni contrôle noté pour les 7 prochains jours.</p>`}
       ${edtLine(tomorrow) ? `<p class="small">Demain (${dayName(tomorrow)}) :</p>${edtLine(tomorrow)}` : ""}</section>` : ""}
+    ${confond.length ? `<section class="list">${confond.map(f => ficheRow(f, f.subject, false, true)).join("")}</section>` : ""}
     ${due.length ? `<section class="card"><h2>À réviser aujourd'hui</h2>
       <ul class="due">${due.map(({ s, r }) => `<li data-m="${s.key}"><span class="dot"></span><span>${esc(r.theme)} <span class="muted">· ${esc(s.name)}</span></span></li>`).join("")}</ul>
       <p class="small">Relis la fiche de ces notions, puis refais le dernier quiz de la matière.</p></section>`
@@ -342,9 +345,9 @@ function cardDone(c, s) {
   return ts.length > 0 && ts.every(t => (s.review.find(r => r.theme === t) || {}).status === "acquis");
 }
 const liveCards = (f, s) => f.cards.filter(c => !cardDone(c, s));
-function ficheRow(f, s, all) {
+function ficheRow(f, s, all, home) {
   const n = all ? f.cards.length : liveCards(f, s).length;
-  return `<button class="row" data-go="${all ? "fa" : "f"}-${f.id}"><span class="dot"></span><span class="txt"><span>${esc(f.title)}</span><small>${n} fiche${n > 1 ? "s" : ""} à faire défiler</small></span></button>`;
+  return `<button class="row"${home ? ` data-m="${s.key}"` : ""} data-go="${all ? "fa" : "f"}-${f.id}"><span class="dot"></span><span class="txt"><span>${esc(f.title)}</span><small>${n} fiche${n > 1 ? "s" : ""} à faire défiler${home ? " · " + esc(s.name) : ""}</small></span></button>`;
 }
 function subjectView(s) {
   setFrame(s.name, s.key, true);
