@@ -247,7 +247,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "24/10 10h54";
+const BUILD = "24/10 11h34";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -462,7 +462,9 @@ function todayDue(mine) {
   const test = s => agItems().some(it => it.type === "controle" && it.matiere === s.key && !it.done && dayDiff(it.date) >= 0 && dayDiff(it.date) <= 3);
   DATA.subjects.forEach(s => s.review.forEach(r => { const k = tk(s.key, r.theme); if (r.status !== "acquis" && (test(s) || r.next && r.next <= TODAY) && !st.due.includes(k)) st.due.push(k); }));
   saveDay(st);
-  const row = (s, t) => { const k = tk(s.key, t); return { s, theme: t, read: !!st.read[k] || !themeCard(s, t), ok: !!st.ok[k] }; };
+  // « Quiz ✓ » also comes from today's results on the server (r.today = [ok, n]): the same on every device.
+  const okToday = (s, t) => { const r = s.review.find(x => x.theme === t); return !!(r && r.today && r.today[1] && r.today[0] / r.today[1] >= .8); };
+  const row = (s, t) => { const k = tk(s.key, t); return { s, theme: t, read: !!st.read[k] || !themeCard(s, t), ok: !!st.ok[k] || okToday(s, t) }; };
   const items = st.due.map(k => { const [m, t] = k.split("|"); return SUBJ[m] && row(SUBJ[m], t); }).filter(Boolean);
   // A recurring mistake is worth a look every day: the notion of each active trap joins the list, weakest first,
   // and the traps hang under their notion (one block for « what to revise » instead of two).
