@@ -252,7 +252,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "24/10 13h39";
+const BUILD = "24/10 13h44";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -497,6 +497,29 @@ function markOk(m, per, hits) {
   per.forEach(p => { if (p.n && p.ok / p.n >= .8) st.ok[tk(m, p.t)] = 1; });
   Object.keys(hits || {}).forEach(id => { st.trap[id] = hits[id].every(Boolean); });
   saveDay(st);
+}
+// Same rules as the server (record_, hitPieges_), applied on the phone the moment a quiz ends.
+const LEVELS = ["à revoir", "en cours", "en cours", "acquis", "acquis"], GAPS = [3, 7, 14, 30, 60];
+const plusDays = (iso, k) => new Date(Date.parse(iso + "T12:00:00Z") + k * 864e5).toISOString().slice(0, 10);
+function applyLocal(quiz, per, hits) {
+  const s = quiz.subject;
+  per.forEach(p => {
+    if (!p.n) return;
+    let r = s.review.find(x => x.theme === p.t);
+    if (!r) s.review.push(r = { theme: p.t, level: 0, ok: 0, n: 0 });
+    if (p.ok * 5 >= p.n * 4) r.level = Math.min(r.level + 1, 4); else if (p.ok * 2 < p.n) r.level = Math.max(r.level - 1, 0);
+    r.status = LEVELS[r.level]; r.next = plusDays(TODAY, GAPS[r.level]); r.ok += p.ok; r.n += p.n;
+    const d = r.today || [0, 0]; r.today = [d[0] + p.ok, d[1] + p.n];
+  });
+  s.review.sort((a, b) => a.level - b.level || a.theme.localeCompare(b.theme));
+  const out = [];
+  Object.keys(hits).forEach(id => {
+    const t = (DATA.pieges || []).find(x => x.id === id && !x.done);
+    if (!t) return;
+    hits[id].forEach(ok => { if (!t.done) { t.streak = ok ? (t.streak || 0) + 1 : 0; if (t.streak >= WIN()) t.done = TODAY; } });
+    out.push(t);
+  });
+  return out;
 }
 const trapAsked = (s, id) => s.quizzes.some(q => q.questions.some(x => x.p === id));
 // Quiz express: built on the spot from her earlier quizzes' questions on the day's notions (other sentence half
@@ -1153,17 +1176,24 @@ function result() {
   document.getElementById("home").onclick = () => go("");
   const payload = { quiz: quiz.id, matiere: quiz.subject.folder, num: quiz.num, scores: Object.fromEntries(per.map(p => [p.t, [p.ok, p.n]])), texte, pieges: hits, sid: Date.now() + "-" + quiz.id };
   outbox.add(payload);
+  // She sees the consequences at once, before the server answers (or offline): her notions' levels, her traps'
+  // dots, the quiz marked done. The server applies the same rules; its answer then replaces these values.
+  const before = {}, firstTry = !quiz.score || quiz.express;
+  (DATA.pieges || []).forEach(t => { before[t.id] = t.streak || 0; });
+  const touched = firstTry ? applyLocal(quiz, per, hits) : [];
+  if (firstTry && QUIZ[quiz.id]) QUIZ[quiz.id].score = [n, total];
+  const gain = t => t.done ? `<p class="pgwin">★ Piège fermé : ${esc(t.titre)}</p>` : (t.streak || 0) > (before[t.id] || 0) ? `<p class="pgwin">● +1 boule : ${esc(t.titre)}</p>` : `<p class="pglost">Boules remises à zéro : ${esc(t.titre)}</p>`;
+  const showTraps = ts => { const pg = document.getElementById("pgres"); if (pg && ts.length) pg.innerHTML = `${ts.map(gain).join("")}<ul class="pieges">${ts.map(t => piegeRow(t)).join("")}</ul>`; };
+  showTraps(touched);
   const save = () => {
     const el = document.getElementById("sent");
     if (el) { el.className = "sent"; el.textContent = "Enregistrement de ton résultat…"; }
     run("saveResult", payload).then(r => {
       pendingSave = null; outbox.drop(payload.sid);
-      if (r.recorded && !quiz.score && QUIZ[quiz.id]) QUIZ[quiz.id].score = [n, total];
-      const before = {};
-      (r.pieges || []).forEach(t => { const k = (DATA.pieges || []).findIndex(x => x.id === t.id); if (k >= 0) { before[t.id] = DATA.pieges[k].streak || 0; DATA.pieges[k] = t; } });
-      const pg = document.getElementById("pgres"), sent = document.getElementById("sent");
-      const gain = t => t.done ? `<p class="pgwin">★ Piège fermé : ${esc(t.titre)}</p>` : (t.streak || 0) > (before[t.id] || 0) ? `<p class="pgwin">● +1 boule : ${esc(t.titre)}</p>` : `<p class="pglost">Boules remises à zéro : ${esc(t.titre)}</p>`;
-      if (pg && r.pieges && r.pieges.length) pg.innerHTML = `${r.pieges.map(gain).join("")}<ul class="pieges">${r.pieges.map(t => piegeRow(t)).join("")}</ul>`;
+      (r.pieges || []).forEach(t => { const k = (DATA.pieges || []).findIndex(x => x.id === t.id); if (k >= 0) DATA.pieges[k] = t; });
+      if (r.pieges && r.pieges.length) showTraps(r.pieges);
+      const sent = document.getElementById("sent");
+      if (typeof loadData === "function") loadData().catch(() => {});  // the server's own values, quietly
       if (sent) { sent.className = "sent ok"; sent.textContent = r.recorded ? "Résultat enregistré ✓" : "Résultat enregistré ✓ (quiz refait : seule ta première tentative compte)"; }
     }).catch(err => {
       if (/forbidden/.test(String(err && err.message))) linkBad = true; else pendingSave = save;
