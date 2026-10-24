@@ -250,7 +250,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "24/10 12h29";
+const BUILD = "24/10 12h43";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -326,6 +326,8 @@ function home() {
   // All ticked: next notions first, then a quiz on the traps still open; « Tout est révisé » only when nothing is left.
   const more = allDone ? moreDue(mine) : [];
   const trapThemes = m => [...new Set(activePieges().filter(p => p.m === m && p.t).map(p => p.t))].filter(t => SUBJ[m].quizzes.some(q => q.questions.some(x => x.t === t)));
+  // A subject whose notions are all ticked but with traps still open: its quiz express becomes a « Quiz pièges ».
+  const trapButton = (sub, multi) => trapThemes(sub.key).length ? `<button class="main" data-xp="${sub.key}">Quiz pièges${multi ? " · " + esc(sub.name) : ""}</button>` : "";
   const trapSubs = allDone && !more.length ? [...new Set(activePieges().map(p => p.m))].filter(m => mine(SUBJ[m]) && trapThemes(m).length) : [];
   const multi = new Set(due.map(d => d.s.key)).size > 1;  // one subject: its colour dot says it
   const todo = Object.values(QUIZ).filter(q => !q.score && mine(q.subject) && (q.title !== "Révisions avant contrôle" || testAhead(q.subject)));
@@ -346,11 +348,10 @@ function home() {
         <span class="steps"><span class="${d.read ? "on" : ""}">Fiche${d.read ? " ✓" : ""}</span><span class="${d.ok ? "on" : ""}">Quiz${d.ok ? " ✓" : ""}</span></span></li>
         ${d.traps.map(p => `<li class="lnk sub" data-m="${p.m}" role="button" tabindex="0" data-go="fp-${esc(p.id)}"><span class="grow">↳ ${esc(p.titre)}</span>${pips(p)}</li>`).join("")}`).join("")}</ul>
       ${all.length > shown.length ? `<button class="more" data-moredue="${sub.key}">${all.length - shown.length > 1 ? `Voir les ${all.length - shown.length} autres notions` : "Voir l'autre notion"}</button>` : ""}
-      ${allDone ? "" : expressButton(sub, shown.filter(d => !d.ok), multi)}`; }).join("")}
+      ${(allDone ? "" : expressButton(sub, shown.filter(d => !d.ok), multi)) || trapButton(sub, multi)}`; }).join("")}
       ${allDone ? (more.length ? `<p class="small">Bravo, ta liste du jour est faite ! Continue avec les notions que tu ne maîtrises pas encore.</p>
       <button class="main" id="moredue">Continuer : ${more.length} notion${more.length > 1 ? "s" : ""} de plus</button>`
-      : trapSubs.length ? `<p class="small">Bravo ! Il te reste des pièges à fermer : 3 bonnes réponses de suite.</p>
-      ${trapSubs.map(m => `<button class="main" data-xp="${m}">Quiz pièges${trapSubs.length > 1 ? " · " + esc(SUBJ[m].name) : ""}</button>`).join("")}`
+      : trapSubs.length ? `<p class="small">Bravo ! Il te reste des pièges à fermer : 3 bonnes réponses de suite, avec le quiz pièges.</p>`
       : `<p class="sent ok">Tout est révisé pour aujourd'hui ✓</p>`) : `
       <p class="small">${left.length ? "Touche une notion ou un piège (↳) pour relire sa fiche, puis fais le quiz express : chaque notion se coche." : "Quiz réussi ! Touche les notions sans « Fiche ✓ » pour relire leur fiche."}</p>`}</section>`
       : todo.length ? `<p class="empty">Rien à revoir, ${todo.length} quiz ${todo.length > 1 ? "t'attendent" : "t'attend"}.</p>`
@@ -435,7 +436,7 @@ function moreQuizzes(todo) {
 function quizRow(q) {
   q = QUIZ[q.id];
   return `<button class="row" data-m="${q.subject.key}" data-go="q-${q.id}"><span class="dot"></span>
-    <span class="txt"><span>${esc(q.title)}</span><small>${q.questions.length} questions · ${esc(q.subject.name)}</small></span>${badge(q)}</button>`;
+    <span class="txt"><span>${esc(q.title)}</span><small>${/^\d+$/.test(q.num) ? `n°${q.num} · ` : ""}${q.questions.length} questions · ${esc(q.subject.name)}</small></span>${badge(q)}</button>`;
 }
 
 // A card names its notions (`t`: a theme or a list). Once every one is « acquis », the card hides: she revises
