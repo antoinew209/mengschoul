@@ -59,6 +59,8 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .small { color: var(--muted); font-size: 14px; margin: 0; }
 #ptr { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 8px); transform: translate(-50%, -80px); transition: transform .2s; z-index: 20; pointer-events: none;
   background: var(--card); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 14px; white-space: nowrap; }
+.pgwin { margin: 0; color: var(--ok); font-weight: 700; }
+.pglost { margin: 0; color: var(--bad); font-weight: 700; }
 #ptr.show { transform: translate(-50%, 0); }
 #avion { text-align: center; color: var(--muted); font-size: 13px; margin: 20px 0 8px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -250,7 +252,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "24/10 12h43";
+const BUILD = "24/10 13h39";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -457,7 +459,7 @@ const dayKey = "jour-" + TODAY, tk = (m, t) => m + "|" + t;
 function dayState() {
   try { const st = JSON.parse(store.get(dayKey)); if (st && st.due) return st; } catch (e) {}
   try { Object.keys(localStorage).filter(k => k.startsWith("jour-")).forEach(k => localStorage.removeItem(k)); } catch (e) {}  // older days
-  return { due: [], read: {}, ok: {} };
+  return { due: [], read: {}, ok: {}, trap: {} };
 }
 const saveDay = st => store.set(dayKey, JSON.stringify(st));
 function todayDue(mine) {
@@ -475,6 +477,9 @@ function todayDue(mine) {
   const traps = activePieges().slice().sort((a, b) => (a.streak || 0) - (b.streak || 0));
   traps.forEach(p => { const s = SUBJ[p.m], t = p.t || p.titre; if (!items.some(d => d.s === s && d.theme === t)) items.push(Object.assign(row(s, t), { trapOnly: !p.t && p })); });
   items.forEach(d => { d.traps = d.trapOnly ? [] : traps.filter(p => p.m === d.s.key && p.t === d.theme); });
+  // « Quiz ✓ » on a notion that carries traps: also each trap answered right today (a dot filled), when a quiz can ask it.
+  const trapRight = p => (st.trap || {})[p.id] === true || !trapAsked(SUBJ[p.m], p.id);
+  items.forEach(d => { if (d.ok && !d.traps.every(trapRight)) d.ok = false; });
   return items.filter(d => mine(d.s));
 }
 function markRead(m, themes) { const st = dayState(); themes.forEach(t => { st.read[tk(m, t)] = 1; }); saveDay(st); }
@@ -487,7 +492,13 @@ function moreDue(mine) {
     .sort((a, b) => a.level - b.level || (a.next || "").localeCompare(b.next || "")).slice(0, 3).map(r => tk(s.key, r.theme))));
   return out;
 }
-function markOk(m, per) { const st = dayState(); per.forEach(p => { if (p.n && p.ok / p.n >= .8) st.ok[tk(m, p.t)] = 1; }); saveDay(st); }
+function markOk(m, per, hits) {
+  const st = dayState(); st.trap = st.trap || {};
+  per.forEach(p => { if (p.n && p.ok / p.n >= .8) st.ok[tk(m, p.t)] = 1; });
+  Object.keys(hits || {}).forEach(id => { st.trap[id] = hits[id].every(Boolean); });
+  saveDay(st);
+}
+const trapAsked = (s, id) => s.quizzes.some(q => q.questions.some(x => x.p === id));
 // Quiz express: built on the spot from her earlier quizzes' questions on the day's notions (other sentence half
 // the time), so she revises now without waiting for the cloud job. Works offline too.
 function expressQuiz(s, themes) {
@@ -496,7 +507,10 @@ function expressQuiz(s, themes) {
   const per = Math.max(2, Math.ceil(10 / themes.length));
   const traps = new Set(activePieges().map(p => p.id));  // questions on her active traps first
   const pick = t => { const xs = shuffle(pool[t]); return [...xs.filter(x => traps.has(x.p)), ...xs.filter(x => !traps.has(x.p))].slice(0, per); };
-  const qs = shuffle(themes.flatMap(pick)).slice(0, 12).map(x => { const v = variant(x, Math.random() < .5); delete v.base; return v; });
+  const must = activePieges().filter(p => p.m === s.key && themes.includes(p.t))
+    .flatMap(p => shuffle((pool[p.t] || []).filter(x => x.p === p.id)).slice(0, 2));
+  const rest = shuffle(themes.flatMap(pick)).filter(x => !must.some(y => y.q === x.q));
+  const qs = shuffle([...must, ...rest].slice(0, 12)).map(x => { const v = variant(x, Math.random() < .5); delete v.base; return v; });
   return { id: "express-" + s.key + "-" + Date.now(), title: "Quiz express", num: "x" + Date.now().toString(36), express: true, subject: s,
     lang: (s.quizzes[0] || {}).lang, intro: `${qs.length} questions sur tes notions du jour. Environ ${Math.max(3, Math.round(qs.length / 2))} minutes.`, questions: qs };
 }
@@ -1111,7 +1125,9 @@ function result() {
   const verdict = pct >= .9 ? "Excellent, c'est acquis." : pct >= .7 ? "Bien. Revois les thèmes en rouge." : pct >= .5 ? "C'est en progrès. Relis les fiches des thèmes en rouge." : "Encore du travail : relis les fiches puis refais le quiz.";
   const texte = `${quizLabel(quiz)} : ${n}/${total}\n` + per.map(p => `${p.ok === p.n ? "OK" : "X"} ${p.t} ${p.ok}/${p.n}`).join("\n") +
     (errs.length ? `\n\nErreurs :\n` + errs.map(e => `- ${e.q} -> "${e.given}" (juste : ${e.right})`).join("\n") : "");
-  markOk(quiz.subject.key, per);
+  const hits = {};
+  answers.forEach(a => { if (a.p) (hits[a.p] = hits[a.p] || []).push(a.ok); });
+  markOk(quiz.subject.key, per, !quiz.score || quiz.express ? hits : null);
   const first = !quiz.score && !quiz.express, best = first ? bestPct(quiz.subject, quiz.id) : null, r0 = best === null ? 0 : Math.round(best * total);
   const rec = !first ? "" : best === null ? `<p class="rec">Premier score en ${esc(quiz.subject.name)} : c'est ton record à battre.</p>`
     : pct > best + 1e-9 ? `<p class="rec win"><span class="star">★</span> Nouveau record en ${esc(quiz.subject.name)} !</p>`
@@ -1135,8 +1151,6 @@ function result() {
   if (errs.length) document.getElementById("retry").onclick = () => secondChance(quiz, errs.map(e => e.src));
   document.getElementById("again").onclick = () => { Z = { quiz, qs: quiz.questions, i: 0, answers: [] }; show(); };
   document.getElementById("home").onclick = () => go("");
-  const hits = {};
-  answers.forEach(a => { if (a.p) (hits[a.p] = hits[a.p] || []).push(a.ok); });
   const payload = { quiz: quiz.id, matiere: quiz.subject.folder, num: quiz.num, scores: Object.fromEntries(per.map(p => [p.t, [p.ok, p.n]])), texte, pieges: hits, sid: Date.now() + "-" + quiz.id };
   outbox.add(payload);
   const save = () => {
@@ -1145,9 +1159,11 @@ function result() {
     run("saveResult", payload).then(r => {
       pendingSave = null; outbox.drop(payload.sid);
       if (r.recorded && !quiz.score && QUIZ[quiz.id]) QUIZ[quiz.id].score = [n, total];
-      (r.pieges || []).forEach(t => { const k = (DATA.pieges || []).findIndex(x => x.id === t.id); if (k >= 0) DATA.pieges[k] = t; });
+      const before = {};
+      (r.pieges || []).forEach(t => { const k = (DATA.pieges || []).findIndex(x => x.id === t.id); if (k >= 0) { before[t.id] = DATA.pieges[k].streak || 0; DATA.pieges[k] = t; } });
       const pg = document.getElementById("pgres"), sent = document.getElementById("sent");
-      if (pg && r.pieges && r.pieges.length) pg.innerHTML = `<p class="small">Tes pièges dans ce quiz :</p><ul class="pieges">${r.pieges.map(piegeRow).join("")}</ul>`;
+      const gain = t => t.done ? `<p class="pgwin">★ Piège fermé : ${esc(t.titre)}</p>` : (t.streak || 0) > (before[t.id] || 0) ? `<p class="pgwin">● +1 boule : ${esc(t.titre)}</p>` : `<p class="pglost">Boules remises à zéro : ${esc(t.titre)}</p>`;
+      if (pg && r.pieges && r.pieges.length) pg.innerHTML = `${r.pieges.map(gain).join("")}<ul class="pieges">${r.pieges.map(t => piegeRow(t)).join("")}</ul>`;
       if (sent) { sent.className = "sent ok"; sent.textContent = r.recorded ? "Résultat enregistré ✓" : "Résultat enregistré ✓ (quiz refait : seule ta première tentative compte)"; }
     }).catch(err => {
       if (/forbidden/.test(String(err && err.message))) linkBad = true; else pendingSave = save;
