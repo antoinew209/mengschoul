@@ -252,7 +252,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "24/10 13h44";
+const BUILD = "24/10 19h29";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -322,7 +322,6 @@ function home() {
   // The day before and the day of a test, home offers only that subject: the rest stays in Tes matières.
   const exam = agItems().find(it => it.type === "controle" && !it.done && SUBJ[it.matiere] && (it.date === TODAY || it.date === tomorrow));
   // « Révisions avant contrôle » quizzes only while that subject still has a test ahead (not passed, not over).
-  const testAhead = s => agItems().some(it => it.type === "controle" && it.matiere === s.key && !it.done && dayDiff(it.date) >= 0);
   const mine = s => !exam || s.key === exam.matiere;
   const due = todayDue(mine), left = due.filter(d => !d.ok), allDone = due.every(d => d.read && d.ok);
   // All ticked: next notions first, then a quiz on the traps still open; « Tout est révisé » only when nothing is left.
@@ -332,7 +331,7 @@ function home() {
   const trapButton = (sub, multi) => trapThemes(sub.key).length ? `<button class="main" data-xp="${sub.key}">Quiz pièges${multi ? " · " + esc(sub.name) : ""}</button>` : "";
   const trapSubs = allDone && !more.length ? [...new Set(activePieges().map(p => p.m))].filter(m => mine(SUBJ[m]) && trapThemes(m).length) : [];
   const multi = new Set(due.map(d => d.s.key)).size > 1;  // one subject: its colour dot says it
-  const todo = Object.values(QUIZ).filter(q => !q.score && mine(q.subject) && (q.title !== "Révisions avant contrôle" || testAhead(q.subject)));
+  const todo = DATA.subjects.filter(mine).map(nextQuiz).filter(Boolean);
   const redo = DATA.scans.filter(s => s.status === "à refaire");  // only what asks something of her
   // Her « Ce que tu confonds encore » fiche (rewritten after each missed quiz) sits under the test reminder on
   // test days only; the rest of the time her traps lead to it.
@@ -556,13 +555,19 @@ function themeCard(s, theme) {
   return null;
 }
 const themeGo = (s, theme) => esc(themeCard(s, theme) ? `nt-${s.key}~${encodeURIComponent(theme)}` : `m-${s.key}`);
+// « Révisions avant contrôle » quizzes only while that subject still has a test ahead (not passed, not over).
+const testAhead = s => agItems().some(it => it.type === "controle" && it.matiere === s.key && !it.done && dayDiff(it.date) >= 0);
+// One quiz to do per subject: the newest one (built on her latest mistakes). Older undone ones stay out of sight;
+// their questions still feed the quiz express.
+const nextQuiz = s => s.quizzes.filter(q => !QUIZ[q.id].score && (q.title !== "Révisions avant contrôle" || testAhead(s)))
+  .sort((a, b) => (parseInt(b.num, 10) || 0) - (parseInt(a.num, 10) || 0))[0] || null;
 function subjectView(s) {
   setFrame(s.name, s.key, true);
   const live = s.fiches.filter(f => liveCards(f, s).length), done = s.fiches.filter(f => !liveCards(f, s).length);
   app.innerHTML = `
     ${s.fiches.length ? `<section class="list"><h2>Fiches</h2>${live.map(f => ficheRow(f, s)).join("")}${live.length ? "" : `<p class="empty">Toutes tes fiches sont maîtrisées. Bravo !</p>`}
       ${done.length ? `<button class="more" id="donef">Voir ${done.length > 1 ? `les ${done.length} fiches maîtrisées` : "la fiche maîtrisée"}</button>` : ""}</section>` : ""}
-    <section class="list"><h2>Quiz</h2>${s.quizzes.length ? s.quizzes.map(quizRow).join("") : `<p class="empty">Pas encore de quiz. Scanne un cours pour en avoir un.</p>`}</section>
+    <section class="list"><h2>Quiz</h2>${s.quizzes.length ? [nextQuiz(s), ...s.quizzes.filter(q => QUIZ[q.id].score)].filter(Boolean).map(quizRow).join("") : `<p class="empty">Pas encore de quiz. Scanne un cours pour en avoir un.</p>`}</section>
     ${s.review.length ? `<section class="card"><h2>Tes notions</h2><ul class="due">${s.review.map(r => `
       <li class="lnk" role="button" tabindex="0" data-go="${themeGo(s, r.theme)}"><span class="badge ${r.status === "acquis" ? "good" : r.status === "en cours" ? "mid" : "low"}">${esc(r.status)}</span><span class="grow">${esc(r.theme)}</span><span class="chev">›</span></li>`).join("")}</ul></section>` : ""}`;
   const b = document.getElementById("donef");
