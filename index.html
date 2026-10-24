@@ -252,7 +252,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "24/10 19h29";
+const BUILD = "24/10 19h46";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -524,6 +524,10 @@ const trapAsked = (s, id) => s.quizzes.some(q => q.questions.some(x => x.p === i
 // Quiz express: built on the spot from her earlier quizzes' questions on the day's notions (other sentence half
 // the time), so she revises now without waiting for the cloud job. Works offline too.
 function expressQuiz(s, themes) {
+  // At most 5 notions, the least mastered: lowest level first, then the ones with the weakest open trap.
+  const lvl = t => (s.review.find(r => r.theme === t) || { level: 0 }).level;
+  const trapMin = t => Math.min(3, ...activePieges().filter(p => p.m === s.key && p.t === t).map(p => p.streak || 0));
+  themes = [...new Set(themes)].sort((a, b) => lvl(a) - lvl(b) || trapMin(a) - trapMin(b)).slice(0, 5);
   const pool = {}; themes.forEach(t => { pool[t] = []; });
   s.quizzes.forEach(q => q.questions.forEach(x => { if (pool[x.t]) pool[x.t].push({ ...x, lang: x.lang || q.lang }); }));
   const per = Math.max(2, Math.ceil(10 / themes.length));
