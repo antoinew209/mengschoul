@@ -20,7 +20,7 @@
 :root {
   --bg: #f6f5f2; --card: #ffffff; --fg: #1d1b1a; --muted: #6b6560; --line: #e2ddd6; --chip: #efe9e2;
   --gold: #e0a400; --ok: #1f7a4a; --ok-bg: #e6f3eb; --bad: #b3122e; --bad-bg: #fbe8eb;
-  --de: #b3122e; --fr: #1f4fb3; --ma: #6a3fb5; --sc: #0f7a6c; --ar: #be185d; --ia: #c2410c;
+  --de: #b3122e; --fr: #1f4fb3; --ma: #6a3fb5; --sc: #0f7a6c; --ar: #be185d; --ia: #c2410c; --ge: #8a5a14;
   --fn-s: #1d5fd6; --fn-cod: #d0192f; --fn-coi: #12823e;
   --accent: var(--fg);
   --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
@@ -30,7 +30,7 @@
   :root {
     --bg: #161514; --card: #211f1d; --fg: #f1ede8; --muted: #a8a19a; --line: #38342f; --chip: #2c2926;
     --gold: #f2c14e; --ok: #5fd08f; --ok-bg: #173323; --bad: #ff6b7d; --bad-bg: #3a1b20;
-    --de: #ff5a6e; --fr: #7aa2ff; --ma: #b99bff; --sc: #4fd1bf; --ar: #f472b6; --ia: #ff8a4c;
+    --de: #ff5a6e; --fr: #7aa2ff; --ma: #b99bff; --sc: #4fd1bf; --ar: #f472b6; --ia: #ff8a4c; --ge: #e0b26b;
     --fn-s: #6cb4ff; --fn-cod: #ff6b6b; --fn-coi: #4fdc8a;
     color-scheme: dark;
   }
@@ -42,6 +42,7 @@
 [data-m="agenda"] { --accent: var(--gold); }
 [data-m="arts"] { --accent: var(--ar); }
 [data-m="ia"] { --accent: var(--ia); }
+[data-m="geschichte"] { --accent: var(--ge); }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 17px; line-height: 1.45; }
@@ -175,6 +176,12 @@ details > summary { cursor: pointer; font-family: var(--display); font-weight: 6
 .ag .txt .mini { align-self: flex-start; margin-top: 6px; }
 .ag .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .ag .btns .mini { margin-top: 0; }
+.days { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.days .mini { color: var(--bg); }
+.tile.on { background: var(--accent); color: #fff; }
+#nday { font: inherit; padding: 8px 10px; border-radius: 10px; border: 2px solid var(--line); background: var(--bg); color: var(--fg); }
+#ntitle { font-size: 17px; }
+button.main:disabled { opacity: .5; cursor: default; }
 .ag .mini.alt { background: transparent; color: var(--fg); border: 2px solid var(--line); }
 .ag.late .meta { color: var(--bad); font-weight: 700; }
 .ag.done b { text-decoration: line-through; color: var(--muted); }
@@ -187,7 +194,7 @@ details > summary { cursor: pointer; font-family: var(--display); font-weight: 6
 .ask + .ask { border-top: 1px solid var(--line); padding-top: 12px; }
 .ask q { font-style: italic; color: var(--muted); }
 .ask .opts { display: flex; flex-wrap: wrap; gap: 6px; }
-.ask .opts .mini.alt { background: transparent; color: var(--fg); border: 2px solid var(--line); }
+.ask .opts .mini.alt, .days .mini.alt { background: transparent; color: var(--fg); border: 2px solid var(--line); }
 .edt span { background: var(--chip); border-left: 4px solid var(--accent); border-radius: 6px; padding: 3px 8px; font-size: 14px; }
 /* progress */
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -240,7 +247,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "22/10 17h34";
+const BUILD = "24/10 10h02";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -265,12 +272,13 @@ function badge(q) {
 // In-page navigation stack of tokens: "" | m-<subject> | q-<quiz id> | f-<fiche id> | scan | scan-<subject> | scan-<subject>-<kind>
 const stack = [];
 let updateReady = false;  // a new version is waiting: loaded when she is back on the home page
-function go(token) { if (token) stack.push(token); else stack.length = 0; render(); }
+let shownView = null;  // a background refresh redraws the same view: keep where she has scrolled to
+function go(token) { if (token) stack.push(token); else stack.length = 0; shownView = null; render(); }
 back.onclick = () => { stack.pop(); render(); };
 
 function render() {
   const t = stack[stack.length - 1] || "";
-  window.scrollTo(0, 0);
+  if (t !== shownView) { window.scrollTo(0, 0); shownView = t; }
   count.textContent = "";
   if (t.startsWith("m-") && SUBJ[t.slice(2)]) return subjectView(SUBJ[t.slice(2)]);
   if (t.startsWith("q-") && QUIZ[t.slice(2)]) return quizIntro(QUIZ[t.slice(2)]);
@@ -284,6 +292,7 @@ function render() {
   if (t === "scan") return scanSubject();
   if (t === "progres") return progress();
   if (t === "agenda") return agendaView();
+  if (t === "ajout") return addTestView();
   if (t.startsWith("scan-")) return scanStep(t.slice(5));
   home();
 }
@@ -600,8 +609,43 @@ function agendaView() {
       ${items.length ? `<ul class="due">${items.map(agRow).join("")}</ul>` : `<p class="empty">Rien de noté. Scanne ton carnet pour remplir ton agenda.</p>`}</section>
     ${edt ? `<section class="card"><h2>Ton emploi du temps</h2>${["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"].filter(d => edt[d] && edt[d].length).map(d => `
       <div class="list"><b>${d[0].toUpperCase() + d.slice(1)}</b>${edtChips(edt[d])}</div>`).join("")}</section>` : ""}
+    <button class="main" data-go="ajout">+ Ajouter un contrôle</button>
     <button class="sec" data-go="scan-agenda">Scanner ton carnet ou ton emploi du temps</button>`;
   wire(); wireAgenda(agendaView);
+}
+// She notes a test herself: subject, day, and what it is on. It is saved at once on the phone (offline too)
+// and sent like her other writes; a test within 3 days gets its revision quiz from the cloud job.
+const NEWT = { m: null, date: null, title: "" };
+function addTestView() {
+  setFrame("Ajouter un contrôle", null, true);
+  const days = [];
+  for (let i = 1; days.length < 10; i++) {
+    const iso = new Date(Date.parse(TODAY + "T12:00:00Z") + i * 864e5).toISOString().slice(0, 10);
+    if (!/^(samedi|dimanche)$/.test(dayName(iso))) days.push(iso);
+  }
+  const ok = NEWT.m && NEWT.date;
+  app.innerHTML = `<section class="card"><h2>1. En quelle matière ?</h2>
+      <div class="tiles">${DATA.subjects.map(s => `<button class="tile${NEWT.m === s.key ? " on" : ""}" data-m="${s.key}" data-pick="${s.key}" aria-pressed="${NEWT.m === s.key}"><b>${esc(s.name)}</b></button>`).join("")}</div></section>
+    <section class="card"${NEWT.m ? ` data-m="${NEWT.m}"` : ""}><h2>2. Quel jour ?</h2>
+      <div class="days">${days.map(d => `<button class="mini${NEWT.date === d ? "" : " alt"}" data-day="${d}">${dayLabel(d)}</button>`).join("")}</div>
+      <label class="small" for="nday">Plus tard :</label> <input type="date" id="nday" min="${TODAY}" value="${NEWT.date && !days.includes(NEWT.date) ? NEWT.date : ""}"></section>
+    <section class="card"><h2>3. Sur quoi ? <span class="small">(si tu sais)</span></h2>
+      <input type="text" id="ntitle" maxlength="120" placeholder="Ex. : les fonctions S, COD, COI" value="${esc(NEWT.title)}"></section>
+    <button class="main" id="nadd"${ok ? "" : " disabled"}>${ok ? `Ajouter : ${esc(SUBJ[NEWT.m].name)}, ${dayLabel(NEWT.date)}` : "Choisis la matière et le jour"}</button>`;
+  const keep = () => { NEWT.title = document.getElementById("ntitle").value; };
+  app.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => { keep(); NEWT.m = b.dataset.pick; addTestView(); });
+  app.querySelectorAll("[data-day]").forEach(b => b.onclick = () => { keep(); NEWT.date = b.dataset.day; addTestView(); });
+  document.getElementById("nday").onchange = e => { keep(); if (e.target.value >= TODAY) NEWT.date = e.target.value; addTestView(); };
+  document.getElementById("nadd").onclick = () => {
+    keep();
+    const it = { id: "elle-" + Date.now().toString(36), date: NEWT.date, type: "controle", matiere: NEWT.m, title: NEWT.title.trim() || "Contrôle", by: "elle" };
+    DATA.agenda = DATA.agenda || { items: [] }; DATA.agenda.items = DATA.agenda.items || [];
+    DATA.agenda.items.push(it);
+    store.set("data", JSON.stringify(DATA));
+    queue("addAgenda", [it.id, it.matiere, it.date, it.title], "add-" + it.id);
+    Object.assign(NEWT, { m: null, date: null, title: "" });
+    stack.pop(); render();
+  };
 }
 let SCAN = null;
 function progress() {
@@ -974,6 +1018,7 @@ function applyOutbox(d) {
   outbox.all().map(opOf).forEach(({ fn, args }) => {
     const items = (d.agenda && d.agenda.items) || [];
     if (fn === "toggleAgenda") { const it = items.find(i => i.id === args[0]); if (it) it.done = args[1]; }
+    else if (fn === "addAgenda") { if (d.agenda && !items.some(i => i.id === args[0])) items.push({ id: args[0], matiere: args[1], date: args[2], type: "controle", title: args[3], by: "elle" }); }
     else if (fn === "answerAgenda") { const it = items.find(i => i.id === args[0]); if (it && it.ask) { Object.assign(it, (it.ask.options[args[1]] || {}).set || {}); delete it.ask; } }
     else if (fn === "saveResult") d.subjects.forEach(s => s.quizzes.forEach(q => { if (q.id === args[0].quiz && !q.score) q.score = sumScore(args[0].scores); }));
   });
