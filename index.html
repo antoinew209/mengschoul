@@ -252,7 +252,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "24/10 21h59";
+const BUILD = "25/10 10h01";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -319,11 +319,13 @@ function home() {
   if (updateReady) { updateReady = false; try { sessionStorage.setItem("upd-at", Date.now()); } catch (e) {} return location.reload(); }
   setFrame("Tes révisions", null, false);
   const tomorrow = new Date(Date.parse(TODAY + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
-  // The day before and the day of a test, home offers only that subject: the rest stays in Tes matières.
+  // The day before and the day of a test, home offers that subject first, plus Allemand (always on home);
+  // the rest stays in Tes matières.
   const exam = agItems().find(it => it.type === "controle" && !it.done && SUBJ[it.matiere] && (it.date === TODAY || it.date === tomorrow));
-  // « Révisions avant contrôle » quizzes only while that subject still has a test ahead (not passed, not over).
-  const mine = s => !exam || s.key === exam.matiere;
-  const due = todayDue(mine), left = due.filter(d => !d.ok), allDone = due.every(d => d.read && d.ok);
+  const ALWAYS = ["allemand"];
+  const mine = s => !exam || s.key === exam.matiere || ALWAYS.includes(s.key);
+  const first = d => exam && d.s.key === exam.matiere ? 0 : 1;
+  const due = todayDue(mine).sort((x, y) => first(x) - first(y)), left = due.filter(d => !d.ok), allDone = due.every(d => d.read && d.ok);
   // All ticked: next notions first; « Tout est révisé » only when nothing is left, open traps included.
   const more = allDone ? moreDue(mine) : [];
   const trapsLeft = allDone && !more.length && activePieges().some(p => mine(SUBJ[p.m]));
@@ -358,7 +360,7 @@ function home() {
       <p class="small">${left.length ? "Touche une notion ou un piège (↳) pour relire sa fiche, puis fais ton quiz : chaque notion réussie se coche." : "Quiz réussi ! Touche les notions sans « Fiche ✓ » pour relire leur fiche."}</p>`}</section>`
       : todo.length ? `<p class="empty">Rien à revoir, ${todo.length} quiz ${todo.length > 1 ? "t'attendent" : "t'attend"}.</p>`
       : `<p class="empty">Rien à faire aujourd'hui. Bravo !</p>`}
-    ${rest.length ? `<section class="list"><h2>${exam ? `Pour ton contrôle ${exam.date === TODAY ? "d'aujourd'hui" : "de demain"}` : due.length ? "Autres quiz" : "Quiz à faire"}</h2>${rest.slice(0, allQuiz ? rest.length : 2).map(quizRow).join("")}
+    ${rest.length ? `<section class="list"><h2>${exam && rest.every(q => QUIZ[q.id].subject.key === exam.matiere) ? `Pour ton contrôle ${exam.date === TODAY ? "d'aujourd'hui" : "de demain"}` : due.length ? "Autres quiz" : "Quiz à faire"}</h2>${rest.slice(0, allQuiz ? rest.length : 2).map(quizRow).join("")}
       ${rest.length > 2 && !allQuiz ? `<button class="more" id="more">${rest.length > 3 ? `Voir les ${rest.length - 2} autres quiz` : "Voir l'autre quiz"}</button>` : ""}</section>` : ""}
     <button class="main" data-go="scan">Scanner un document</button>
     <section class="list"><h2>Tes matières</h2><div class="tiles">${DATA.subjects.map(s => `
