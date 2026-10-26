@@ -122,7 +122,9 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .q b { color: var(--accent); }
 .hint { color: var(--muted); font-size: 16px; margin: -6px 0 0; }
 .audio { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.audio .sec { flex: 1 1 auto; }
+.audio .sec { flex: 1 1 0; width: auto; padding: 11px 8px; }
+.qb { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.qb .q { margin: 0; }
 .heard { margin-top: 8px; font-size: 16px; color: var(--muted); }
 .heard b { color: var(--fg); }
 .opts { display: flex; flex-direction: column; gap: 8px; }
@@ -149,6 +151,7 @@ input.wrong { border-color: var(--bad); background: var(--bad-bg); }
 .sec { font: inherit; font-weight: 700; padding: 11px; border-radius: 14px; border: 2px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; width: 100%; text-align: center; display: block; }
 .go { background: #1f9d55; color: #fff; border: 0; }
 #act { position: sticky; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 4px 14px rgba(0, 0, 0, .18); }
+#act:disabled { opacity: 1; background: var(--chip); color: var(--muted); }
 .score { font-family: var(--display); font-weight: 800; font-size: 52px; line-height: 1; margin: 0; font-variant-numeric: tabular-nums; }
 .score small { font-size: 26px; color: var(--muted); }
 .themes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
@@ -258,7 +261,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "26/10 22h41";
+const BUILD = "26/10 22h54";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -981,12 +984,19 @@ function variant(q, useAlt) {
 }
 // Listening questions (q.audio = a German text): the phone reads it aloud, the text shows only at the correction.
 const canSpeak = () => "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
-function speak(text, rate) {
+// iPhone: the silent switch mutes web speech unless the page asks for the « playback » audio session (Safari 17+);
+// speaking right after cancel() can be dropped, so a running reading is stopped first, then the new one starts.
+function speak(text, rate, onStart) {
   if (!canSpeak()) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text), v = speechSynthesis.getVoices().find(x => /^de(-|_|$)/i.test(x.lang));
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+  const s = speechSynthesis, u = new SpeechSynthesisUtterance(text), v = s.getVoices().find(x => /^de(-|_|$)/i.test(x.lang));
   u.lang = "de-DE"; if (v) u.voice = v; u.rate = rate;
-  speechSynthesis.speak(u);
+  let started = false;
+  u.onstart = () => { started = true; const n = document.getElementById("nosound"); if (n) n.hidden = true; if (onStart) onStart(); };
+  const go = () => { s.speak(u); if (s.resume) s.resume(); };
+  if (s.speaking || s.pending) { s.cancel(); setTimeout(go, 150); } else go();
+  // Nothing heard: tell her what to check (silent switch, volume).
+  setTimeout(() => { const n = document.getElementById("nosound"); if (n && !started && !s.speaking) n.hidden = false; }, 2000);
 }
 function hush() { if ("speechSynthesis" in window) speechSynthesis.cancel(); }
 function secondChance(quiz, missed) {
@@ -994,6 +1004,8 @@ function secondChance(quiz, missed) {
   show();
 }
 function show() {
+  const grp = listenGroup(Z.i);
+  if (grp) return showGroup(grp);
   const { quiz, i } = Z, q = Z.qs[i], lang = quiz.lang;
   Z.chosen = null; Z.checked = false;
   count.textContent = Z.retry ? "Reste " + (Z.qs.length - i) : (i + 1) + " / " + Z.qs.length; fitTitle();
@@ -1008,7 +1020,8 @@ function show() {
   app.innerHTML = `<div class="flag" aria-hidden="true"><div style="width:${(Z.retry ? Z.fixed / Z.total : i / Z.qs.length) * 100}%"></div></div>
     <section class="card">
     <span class="chip">${Z.retry ? "2e chance · " : ""}${esc(q.t)}</span>
-    ${q.audio ? canSpeak() ? `<div class="audio"><button class="sec" id="play">▶ Écouter</button><button class="mini alt" id="slow">Plus lentement</button></div>`
+    ${q.audio ? canSpeak() ? `<div class="audio"><button class="sec" id="play">▶ Vitesse normale</button><button class="sec" id="slow">▶ Plus lentement</button></div>
+      <p class="hint" id="nosound" hidden>Tu n'entends rien ? Enlève le mode silencieux (le petit bouton sur le côté du téléphone), monte le son, puis appuie encore sur ▶.</p>`
       : `<p class="hint">Ton téléphone ne peut pas lire à voix haute : lis le texte.</p><p class="heard">${esc(q.audio)}</p>` : ""}
     <p class="q">${q.html ? q.q : esc(q.q).replaceAll("___", "<b>___</b>")}</p>
     ${q.h ? `<p class="hint">(${esc(q.h)})</p>` : ""}
@@ -1036,8 +1049,8 @@ function show() {
   }
   act.onclick = () => Z.checked ? next() : check();
   if (q.audio && canSpeak()) {
-    document.getElementById("play").onclick = () => speak(q.audio, .9);
-    document.getElementById("slow").onclick = () => speak(q.audio, .65);
+    document.getElementById("play").onclick = () => speak(q.audio, 1);
+    document.getElementById("slow").onclick = () => speak(q.audio, .7);
   }
 }
 function check() {
@@ -1068,6 +1081,95 @@ function check() {
   const act = document.getElementById("act");
   act.textContent = i < Z.qs.length - 1 ? "Suivant" : Z.retry ? "Terminer" : "Voir ton résultat";
   act.focus();
+}
+// Listening like the real test: all the questions of one text on one screen, read first, then 2 listens
+// (each one counted once the voice really starts), then everything is checked together.
+const LISTENS = 2;
+function listenGroup(i) {
+  const q = Z.qs[i];
+  if (Z.retry || !q || !q.audio) return null;
+  let j = i; while (j < Z.qs.length && Z.qs[j].audio === q.audio) j++;
+  return j - i > 1 ? Z.qs.slice(i, j) : null;
+}
+function showGroup(g) {
+  const { quiz, i } = Z, keys = KEYS[quiz.lang] || [];
+  Z.checked = false; Z.sel = g.map(() => null); Z.listened = 0;
+  count.textContent = (i + 1) + "–" + (i + g.length) + " / " + Z.qs.length; fitTitle();
+  const block = (q, k) => `<div class="qb"><p class="q"><b>${k + 1}.</b> ${esc(q.q).replaceAll("___", "<b>___</b>")}</p>
+      ${q.h ? `<p class="hint">(${esc(q.h)})</p>` : ""}
+      ${q.type === "qcm" ? `<div class="opts">${q.o.map((o, m) => `<button class="opt" data-g="${k}" data-k="${m}" aria-pressed="false">${esc(o)}</button>`).join("")}</div>`
+        : `<input type="text" class="gans" data-g="${k}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Ta réponse" aria-label="Réponse ${k + 1}">`}
+      <div class="gfb"></div></div>`;
+  app.innerHTML = `<div class="flag" aria-hidden="true"><div style="width:${i / Z.qs.length * 100}%"></div></div>
+    <section class="card">
+    <span class="chip">${esc(g[0].t)} · ${g.length} questions</span>
+    ${canSpeak() ? `<p class="small" id="listens">Lis d'abord les ${g.length} questions, puis écoute : tu as ${LISTENS} écoutes, comme au contrôle.</p>
+      <div class="audio"><button class="sec" id="play">▶ Vitesse normale</button><button class="sec" id="slow">▶ Plus lentement</button></div>
+      <p class="hint" id="nosound" hidden>Tu n'entends rien ? Enlève le mode silencieux (le petit bouton sur le côté du téléphone), monte le son, puis appuie encore sur ▶.</p>`
+      : `<p class="hint">Ton téléphone ne peut pas lire à voix haute : lis le texte.</p><p class="heard">${esc(g[0].audio)}</p>`}
+    ${g.map(block).join("")}
+    ${keys.length && g.some(q => q.type !== "qcm") ? `<div class="keys">${keys.map(c => `<button type="button" data-c="${c}">${c}</button>`).join("")}</div>` : ""}
+    <div id="fb"></div>
+    <button class="main" id="act" disabled>Vérifier les ${g.length} réponses</button></section>`;
+  const act = document.getElementById("act");
+  const ready = () => { act.disabled = Z.sel.some(v => v === null || v === ""); };
+  app.querySelectorAll(".opt").forEach(b => b.onclick = () => {
+    if (Z.checked) return;
+    const k = +b.dataset.g; Z.sel[k] = +b.dataset.k;
+    app.querySelectorAll(`.opt[data-g="${k}"]`).forEach(x => x.setAttribute("aria-pressed", x === b));
+    ready();
+  });
+  let last = null;
+  app.querySelectorAll(".gans").forEach(inp => { inp.onfocus = () => { last = inp; }; inp.oninput = () => { Z.sel[+inp.dataset.g] = inp.value.trim(); ready(); }; });
+  app.querySelectorAll(".keys button").forEach(b => b.onclick = () => {
+    const inp = last || app.querySelector(".gans"); if (!inp) return;
+    const s0 = inp.selectionStart ?? inp.value.length, e0 = inp.selectionEnd ?? s0;
+    inp.value = inp.value.slice(0, s0) + b.dataset.c + inp.value.slice(e0);
+    inp.focus(); inp.setSelectionRange(s0 + 1, s0 + 1); inp.oninput();
+  });
+  if (canSpeak()) {
+    const left = () => {
+      const n = LISTENS - Z.listened, done = !Z.checked && n <= 0;
+      ["play", "slow"].forEach(id => { document.getElementById(id).disabled = done; });
+      document.getElementById("listens").textContent = Z.checked ? "Réécoute autant que tu veux pour vérifier."
+        : done ? "Tu as utilisé tes " + LISTENS + " écoutes : réponds avec ce que tu as retenu." : n === LISTENS ? `Lis d'abord les ${g.length} questions, puis écoute : tu as ${LISTENS} écoutes, comme au contrôle.`
+        : `Encore ${n} écoute${n > 1 ? "s" : ""}.`;
+    };
+    const play = rate => { if (!Z.checked && Z.listened >= LISTENS) return; speak(g[0].audio, rate, () => { if (!Z.checked) { Z.listened++; left(); } }); };
+    document.getElementById("play").onclick = () => play(1);
+    document.getElementById("slow").onclick = () => play(.7);
+    Z.left = left;
+  }
+  act.onclick = () => Z.checked ? next() : checkGroup(g);
+}
+function checkGroup(g) {
+  const { quiz } = Z;
+  Z.checked = true;
+  const blocks = app.querySelectorAll(".qb");
+  g.forEach((q, k) => {
+    const b = blocks[k];
+    let ok, given, right;
+    if (q.type === "qcm") {
+      ok = Z.sel[k] === q.a; given = q.o[Z.sel[k]]; right = q.o[q.a];
+      b.querySelectorAll(".opt").forEach(x => { x.disabled = true; if (+x.dataset.k === q.a) x.classList.add("right"); else if (+x.dataset.k === Z.sel[k]) x.classList.add("wrong"); });
+    } else {
+      const inp = b.querySelector(".gans");
+      given = inp.value.trim(); right = String(q.a[0]); ok = isRight(q, given, quiz.lang);
+      inp.readOnly = true; inp.classList.add(ok ? "right" : "wrong");
+    }
+    const trap = q.p && activePieges().find(p => p.id === q.p);
+    Z.answers.push({ ok, given, right, t: q.t, p: q.p, src: q, q: q.q });
+    const why = ok ? "" : whyWrong(q, given, quiz.lang);
+    const pg = trap ? `<span class="pg">${ok ? "Piège déjoué ✓" : `C'est un de tes pièges : ${esc(trap.titre)}`}</span>` : "";
+    b.querySelector(".gfb").innerHTML = ok ? `<div class="fb ok"><strong>Juste !</strong>${esc(q.r)}${pg}</div>`
+      : `<div class="fb ko"><strong>Réponse : ${esc(right)}</strong>${why ? `<span class="why">${esc(why)}</span><span class="rule">À retenir : ${esc(q.r)}</span>` : esc(q.r)}${pg}</div>`;
+  });
+  app.querySelectorAll(".keys button").forEach(x => x.disabled = true);
+  if (canSpeak()) { document.getElementById("fb").innerHTML = `<p class="heard"><b>Ce que tu as entendu :</b> ${esc(g[0].audio)}</p>`; if (Z.left) Z.left(); }
+  Z.i += g.length - 1;
+  const act = document.getElementById("act");
+  act.textContent = Z.i < Z.qs.length - 1 ? "Texte suivant" : "Voir ton résultat";
+  act.disabled = false;
 }
 function next() { hush(); Z.i++; Z.i < Z.qs.length ? show() : Z.retry ? retryDone() : result(); }
 function retryDone() {
