@@ -282,7 +282,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "27/10 00h20";
+const BUILD = "27/10 00h41";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -370,7 +370,7 @@ function home() {
   const urg = s => Math.min(999, ...agItems().filter(it => it.matiere === s.key).map(testDays).filter(d => d >= 0));
   const order = [...new Set(due.map(d => d.s))].sort((a, b) => (exam && b.key === exam.matiere) - (exam && a.key === exam.matiere) || urg(a) - urg(b));
   const hero = order.find(s => nextQuiz(s) || lateQuiz(s)) || null;
-  const isOpen = s => !multi || s === (hero || order[0]) || openGrp.has(s.key);
+  const isOpen = s => !multi || s === (hero || order[0]) || ALWAYS.includes(s.key) || openGrp.has(s.key);  // Allemand: always unfolded
   const doneN = due.filter(d => d.read && d.ok).length;
   const todo = DATA.subjects.filter(mine).map(nextQuiz).filter(Boolean);
   const rest = todo.filter(q => !due.some(d => d.s.key === QUIZ[q.id].subject.key));  // the others have their button in « À réviser aujourd'hui »
