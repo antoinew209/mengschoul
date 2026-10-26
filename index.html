@@ -62,6 +62,9 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .pgwin { margin: 0; color: var(--ok); font-weight: 700; }
 .pglost { margin: 0; color: var(--bad); font-weight: 700; }
 #ptr.show { transform: translate(-50%, 0); }
+#swb { position: fixed; left: 6px; top: 50%; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; font-weight: 700;
+  background: var(--card); color: var(--fg); border: 2px solid var(--line); box-shadow: 0 4px 14px rgba(0, 0, 0, .25); opacity: 0; transform: translate(-40px, -50%); z-index: 20; pointer-events: none; }
+#swb.go { background: var(--fg); color: var(--bg); }
 #avion { text-align: center; color: var(--muted); font-size: 13px; margin: 20px 0 8px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .tip { background: var(--chip); border-radius: 12px; padding: 10px 12px; font-size: 15px; display: flex; gap: 10px; align-items: flex-start; }
@@ -91,6 +94,15 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .due li.fait .grow { color: var(--muted); text-decoration: line-through; }
 .due.today li.sub { padding-left: 20px; font-size: 14px; margin-top: -5px; }
 .card h3.grp { font-family: var(--display); font-size: 16px; margin: 4px 0 -2px; color: var(--accent); }
+.dayhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dayprog { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; }
+.dayprog > div { height: 100%; background: var(--ok); border-radius: 3px; }
+.start { margin: 2px 0 -4px; }
+.grp-row { display: flex; align-items: center; gap: 8px; cursor: pointer; padding-top: 8px; border-top: 1px solid var(--line); }
+.grp-row h3.grp { flex: 1; margin: 0; }
+.grp-row .chev { color: var(--muted); font-size: 20px; line-height: 1; transition: transform .15s; }
+.grp-row.open .chev { transform: rotate(90deg); }
+.ag .meta .cd { color: var(--fg); background: var(--chip); border-radius: 999px; padding: 1px 8px; font-size: 13px; font-weight: 700; white-space: nowrap; }
 .due.today li.sub .grow { color: var(--muted); }
 .chev { color: var(--muted); font-weight: 700; }
 .lnk { cursor: pointer; }  /* a row that opens something (not the green .go button) */
@@ -261,7 +273,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "26/10 22h54";
+const BUILD = "27/10 00h07";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -339,11 +351,18 @@ function home() {
   const more = allDone ? moreDue(mine) : [];
   const trapsLeft = allDone && !more.length && activePieges().some(p => mine(SUBJ[p.m]));
   // Under each subject of the day: its one quiz to do (a real 20-question quiz), or when the next one comes.
-  const quizButton = (sub, multi) => { const q = nextQuiz(sub); return q ? `<button class="main" data-go="q-${q.id}">Faire le quiz n°${esc(q.num)}${multi ? " · " + esc(sub.name) : ""}</button>`
+  const quizButton = (sub, multi, cls = "main") => { const q = nextQuiz(sub); return q ? `<button class="${cls}" data-go="q-${q.id}">Faire le quiz n°${esc(q.num)}${multi ? " · " + esc(sub.name) : ""}</button>`
     : lateQuiz(sub) ? `<p class="small">Ton prochain quiz${multi ? " de " + esc(sub.name) : ""} n'est pas encore prêt. En attendant, refais le dernier :</p>
-      <button class="main" data-go="q-${lateQuiz(sub).id}">Refaire le quiz n°${esc(lateQuiz(sub).num)}${multi ? " · " + esc(sub.name) : ""}</button>`
+      <button class="${cls}" data-go="q-${lateQuiz(sub).id}">Refaire le quiz n°${esc(lateQuiz(sub).num)}${multi ? " · " + esc(sub.name) : ""}</button>`
     : `<p class="small">Ton prochain quiz${multi ? " de " + esc(sub.name) : ""} arrive dans quelques minutes.</p>`; };
   const multi = new Set(due.map(d => d.s.key)).size > 1;  // one subject: its colour dot says it
+  // One place to start: the subject with the nearest test (the test subject first on test days) gets the one big
+  // button at the top; the other subjects fold into one line each, opened with a tap.
+  const urg = s => Math.min(999, ...agItems().filter(it => it.matiere === s.key).map(testDays).filter(d => d >= 0));
+  const order = [...new Set(due.map(d => d.s))].sort((a, b) => (exam && b.key === exam.matiere) - (exam && a.key === exam.matiere) || urg(a) - urg(b));
+  const hero = order.find(s => nextQuiz(s) || lateQuiz(s)) || null;
+  const isOpen = s => !multi || s === (hero || order[0]) || openGrp.has(s.key);
+  const doneN = due.filter(d => d.read && d.ok).length;
   const todo = DATA.subjects.filter(mine).map(nextQuiz).filter(Boolean);
   const rest = todo.filter(q => !due.some(d => d.s.key === QUIZ[q.id].subject.key));  // the others have their button in « À réviser aujourd'hui »
   const redo = DATA.scans.filter(s => s.status === "à refaire");  // only what asks something of her
@@ -357,13 +376,19 @@ function home() {
       ${edtLine(tomorrow) ? `<p class="small">Demain (${dayName(tomorrow)}) :</p>${edtLine(tomorrow)}` : ""}</section>` : ""}
     ${scansWaiting ? `<p class="small" id="scanwait">${scansWaiting > 1 ? `${scansWaiting} scans en attente` : "1 scan en attente"} d'envoi : ${scansWaiting > 1 ? "ils partiront" : "il partira"} dès que tu auras du réseau.</p>` : ""}
     ${confond.length ? `<section class="list">${confond.map(f => ficheRow(f, f.subject, false, true)).join("")}</section>` : ""}
-    ${due.length ? `<section class="card"><h2>À réviser aujourd'hui</h2>
-      ${[...new Set(due.map(d => d.s))].map(sub => { const { all, shown } = dueShown(due, sub); return `${multi ? `<h3 class="grp" data-m="${sub.key}">${esc(sub.name)}</h3>` : ""}
+    ${due.length ? `<section class="card"><div class="dayhead"><h2>À réviser aujourd'hui</h2><span class="small" id="dayn">${doneN}/${due.length} faites</span></div>
+      <div class="dayprog" aria-hidden="true"><div style="width:${Math.round(doneN / due.length * 100)}%"></div></div>
+      ${hero ? `<p class="small start">Commence par :</p>${quizButton(hero, multi)}` : `<p class="small">Tes prochains quiz arrivent dans quelques minutes.</p>`}
+      ${order.map(sub => { const { all, shown } = dueShown(due, sub), open = isOpen(sub), q = nextQuiz(sub), ok = all.filter(d => d.read && d.ok).length;
+        const head = multi ? `<div class="grp-row${open ? " open" : ""}" role="button" tabindex="0" data-grp="${sub.key}" aria-expanded="${open}"><h3 class="grp" data-m="${sub.key}">${esc(sub.name)}</h3>
+          <span class="small">${ok}/${all.length} ✓${open ? "" : q ? " · quiz n°" + esc(q.num) : lateQuiz(sub) ? " · refais le n°" + esc(lateQuiz(sub).num) : " · quiz en préparation"}</span><span class="chev" aria-hidden="true">›</span></div>` : "";
+        if (!open) return head;
+        return `${head}
       <ul class="due today">${shown.map(d => `<li data-m="${d.s.key}" class="lnk${d.read && d.ok ? " fait" : ""}" role="button" tabindex="0" data-go="${d.trapOnly ? "fp-" + esc(d.trapOnly.id) : themeGo(d.s, d.theme)}"><span class="dot"></span><span class="grow">${esc(d.theme)}</span>
         <span class="steps"><span class="${d.read ? "on" : ""}">Fiche${d.read ? " ✓" : ""}</span><span class="${d.ok ? "on" : ""}">Quiz${d.ok ? " ✓" : ""}</span></span></li>
         ${d.traps.map(p => `<li class="lnk sub" data-m="${p.m}" role="button" tabindex="0" data-go="fp-${esc(p.id)}"><span class="grow">↳ ${esc(p.titre)}</span>${pips(p)}</li>`).join("")}`).join("")}</ul>
       ${all.length > shown.length ? `<button class="more" data-moredue="${sub.key}">${all.length - shown.length > 1 ? `Voir les ${all.length - shown.length} autres notions` : "Voir l'autre notion"}</button>` : ""}
-      ${quizButton(sub, multi)}`; }).join("")}
+      ${sub === hero ? "" : quizButton(sub, multi, "sec")}`; }).join("")}
       ${allDone ? (more.length ? `<p class="small">Bravo, ta liste du jour est faite ! Continue avec les notions que tu ne maîtrises pas encore.</p>
       <button class="main" id="moredue">Continuer : ${more.length} notion${more.length > 1 ? "s" : ""} de plus</button>`
       : trapsLeft ? `<p class="small">Bravo ! Il te reste des pièges à fermer : 3 bonnes réponses de suite, dans tes quiz.</p>`
@@ -384,6 +409,7 @@ function home() {
     <p class="small">Mis à jour le ${esc(DATA.updated)}.</p>`;
   wire(); wireAgenda(home); moreQuizzes(rest);
   app.querySelectorAll("[data-moredue]").forEach(b => b.onclick = () => { openDue.add(b.dataset.moredue); home(); });
+  app.querySelectorAll("[data-grp]").forEach(b => b.onclick = () => { const k = b.dataset.grp; if (openGrp.has(k)) openGrp.delete(k); else openGrp.add(k); home(); });
   const md = document.getElementById("moredue");
   if (md) md.onclick = () => { const st = dayState(); st.due.push(...more); saveDay(st); home(); };
 
@@ -433,6 +459,7 @@ let allQuiz = false;
 // « À réviser aujourd'hui » shows each subject's 3 most urgent notions: unticked first, those carrying her
 // traps ahead (weakest trap first), ticked ones last. The others unfold per subject; the choice outlives re-renders.
 const openDue = new Set();
+const openGrp = new Set();  // subjects she unfolded on home (the first one is always open)
 function dueShown(due, sub) {
   const trapRank = d => d.traps.length ? Math.min(...d.traps.map(p => p.streak || 0)) : d.trapOnly ? d.trapOnly.streak || 0 : Infinity;
   const all = due.filter(d => d.s === sub).map((d, i) => ({ d, i }))
@@ -638,7 +665,7 @@ function agRow(it) {
   const what = s ? s.name : it.autre;
   return `<li class="ag${it.done ? " done" : ""}${late ? " late" : ""}" data-m="${s ? s.key : "agenda"}">
     ${it.type === "devoir" ? `<button class="chk" data-ag="${esc(it.id)}" aria-pressed="${!!it.done}" aria-label="Fait">✓</button>` : ""}
-    <span class="txt"><span class="meta">${it.type === "devoir" ? "" : `<span class="tag">${it.type === "controle" ? "Contrôle" : "Info"}</span>`}<span>${what ? esc(what) + " · " : ""}${dayLabel(it.date)}</span></span>
+    <span class="txt"><span class="meta">${it.type === "devoir" ? "" : `<span class="tag">${it.type === "controle" ? "Contrôle" : "Info"}</span>`}<span>${what ? esc(what) + " · " : ""}${dayLabel(it.date)}</span>${it.type === "controle" && !it.done && d >= 2 ? `<span class="cd">dans ${d} jours</span>` : ""}</span>
       <b>${esc(it.title)}</b>${it.details ? `<small>${esc(it.details)}</small>` : ""}${wait ? `<small>Quiz de révision en préparation</small>` : ""}
       ${prep || passed ? `<span class="btns">${prep && !it.done ? `<button class="mini" data-go="q-${esc(it.quiz)}">Réviser</button>` : ""}${passed ? `<button class="mini alt" data-passed="${esc(it.id)}">Contrôle passé ✓</button>` : ""}</span>` : ""}</span></li>`;
 }
@@ -1258,6 +1285,24 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) flus
     loadData().then(() => say("✓ À jour", true), () => say(navigator.onLine ? "Pas réussi, réessaie" : "Pas de réseau", true))
       .then(() => setTimeout(() => { say("", false); busy = false; }, 1200));
   });
+})();
+// Swipe from the left edge to go back, in the home-screen app (it has no browser gesture; Safari keeps its own).
+(function () {
+  const app = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone || window.SWB_TEST;
+  const tip = document.createElement("div"); tip.id = "swb"; tip.textContent = "←"; document.body.appendChild(tip);
+  const EDGE = 24, GO = 80;
+  let x0 = null, y0 = 0, dx = 0;
+  const draw = () => { const k = Math.min(Math.max(dx, 0), GO) / GO; tip.style.opacity = k; tip.style.transform = `translate(${k * 40 - 40}px, -50%) scale(${.7 + k * .3})`; tip.classList.toggle("go", dx > GO); };
+  const stop = () => { x0 = null; dx = 0; draw(); };
+  addEventListener("touchstart", e => { const t = e.touches[0]; x0 = app() && stack.length && e.touches.length === 1 && t.clientX < EDGE ? t.clientX : null; y0 = t.clientY; dx = 0; }, { passive: true });
+  addEventListener("touchmove", e => {
+    if (x0 === null) return;
+    const t = e.touches[0]; dx = t.clientX - x0;
+    if (Math.abs(t.clientY - y0) > 50 && Math.abs(t.clientY - y0) > dx) return stop();  // a vertical scroll, not a swipe
+    draw();
+  }, { passive: true });
+  addEventListener("touchend", () => { if (x0 === null) return; const went = dx > GO; stop(); if (went && stack.length) back.onclick(); });
+  addEventListener("touchcancel", stop);
 })();
 // Her link's key was refused (key rotated, or the site opened without her link): nothing can be saved.
 let linkBad = false;
