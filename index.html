@@ -252,7 +252,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "25/10 10h01";
+const BUILD = "26/10 15h53";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -321,7 +321,7 @@ function home() {
   const tomorrow = new Date(Date.parse(TODAY + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
   // The day before and the day of a test, home offers that subject first, plus Allemand (always on home);
   // the rest stays in Tes matières.
-  const exam = agItems().find(it => it.type === "controle" && !it.done && SUBJ[it.matiere] && (it.date === TODAY || it.date === tomorrow));
+  const exam = agItems().find(it => SUBJ[it.matiere] && testDays(it) >= 0 && testDays(it) <= 1);
   const ALWAYS = ["allemand"];
   const mine = s => !exam || s.key === exam.matiere || ALWAYS.includes(s.key);
   const first = d => exam && d.s.key === exam.matiere ? 0 : 1;
@@ -339,7 +339,7 @@ function home() {
   // Her « Ce que tu confonds encore » fiche (rewritten after each missed quiz) sits under the test reminder on
   // test days only; the rest of the time her traps lead to it.
   const confond = exam ? [FICHE[exam.matiere + "-a-revoir"]].filter(f => f && liveCards(f, f.subject).length) : [];
-  const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : !(it.type === "controle" && it.done) && dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
+  const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : it.type === "controle" ? testDays(it) >= 0 && testDays(it) <= 7 : dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
   app.innerHTML = `${linkCard()}${askCard()}
     ${soon.length || edtLine(tomorrow) ? `<section class="card" data-m="agenda"><h2>À venir</h2>
       ${soon.length ? `<ul class="due">${soon.map(agRow).join("")}</ul>` : `<p class="empty">Aucun devoir ni contrôle noté pour les 7 prochains jours.</p>`}
@@ -462,7 +462,7 @@ const saveDay = st => store.set(dayKey, JSON.stringify(st));
 function todayDue(mine) {
   const st = dayState();
   // A test within 3 days: every notion of that subject not yet « acquis » joins the list, due date or not.
-  const test = s => agItems().some(it => it.type === "controle" && it.matiere === s.key && !it.done && dayDiff(it.date) >= 0 && dayDiff(it.date) <= 3);
+  const test = s => agItems().some(it => it.matiere === s.key && testDays(it) >= 0 && testDays(it) <= 3);
   DATA.subjects.forEach(s => s.review.forEach(r => { const k = tk(s.key, r.theme); if (r.status !== "acquis" && (test(s) || r.next && r.next <= TODAY) && !st.due.includes(k)) st.due.push(k); }));
   saveDay(st);
   // « Quiz ✓ » also comes from today's results on the server (r.today = [ok, n]): the same on every device.
@@ -533,7 +533,7 @@ function themeCard(s, theme) {
 }
 const themeGo = (s, theme) => esc(themeCard(s, theme) ? `nt-${s.key}~${encodeURIComponent(theme)}` : `m-${s.key}`);
 // « Révisions avant contrôle » quizzes only while that subject still has a test ahead (not passed, not over).
-const testAhead = s => agItems().some(it => it.type === "controle" && it.matiere === s.key && !it.done && dayDiff(it.date) >= 0);
+const testAhead = s => agItems().some(it => it.matiere === s.key && testDays(it) >= 0);
 // One quiz to do per subject: the newest one (built on her latest mistakes). Older undone ones stay out of sight;
 // a new quiz from the cloud job replaces the newest one.
 const nextQuiz = s => s.quizzes.filter(q => !QUIZ[q.id].score && (q.title !== "Révisions avant contrôle" || testAhead(s)))
@@ -599,6 +599,9 @@ function dayLabel(iso) {
 }
 const agAll = () => ((DATA.agenda && DATA.agenda.items) || []).slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.type === "controle" ? -1 : 1));
 const agItems = () => agAll().filter(it => !it.ask);  // unclear lines wait for her answer first
+// A test is behind her once ticked « passé », or from 16:00 (Luxembourg) on its day: home goes back to normal.
+const luxHour = () => +new Date().toLocaleString("en-GB", { timeZone: "Europe/Luxembourg", hour: "2-digit", hourCycle: "h23" });
+const testDays = it => it.type === "controle" && !it.done && (dayDiff(it.date) > 0 || dayDiff(it.date) === 0 && luxHour() < 16) ? dayDiff(it.date) : -1;
 // Lines the cloud job could not place for sure: it asks her (it.ask = { q, quote, options: [{ label, set }] }).
 function askCard() {
   const asks = agAll().filter(it => it.ask);
