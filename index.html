@@ -63,7 +63,7 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .pglost { margin: 0; color: var(--bad); font-weight: 700; }
 #ptr.show { transform: translate(-50%, 0); }
 #avion { text-align: center; color: var(--muted); font-size: 13px; margin: 20px 0 8px; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .tip { background: var(--chip); border-radius: 12px; padding: 10px 12px; font-size: 15px; display: flex; gap: 10px; align-items: flex-start; }
 .tip button { font: inherit; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 4px; font-size: 18px; }
 .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -81,7 +81,7 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .badge.mid { background: var(--chip); color: var(--fg); }
 .badge.low { background: var(--bad-bg); color: var(--bad); }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; }
-.due { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.due { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .due li { display: flex; align-items: center; gap: 10px; }
 .due li .grow { flex: 1; min-width: 0; }
 .due.today .grow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -89,7 +89,7 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .steps span { border-radius: 999px; padding: 2px 8px; background: var(--chip); color: var(--muted); white-space: nowrap; }
 .steps span.on { background: var(--ok-bg); color: var(--ok); }
 .due li.fait .grow { color: var(--muted); text-decoration: line-through; }
-.due.today li.sub { padding-left: 20px; font-size: 15px; margin-top: -4px; }
+.due.today li.sub { padding-left: 20px; font-size: 14px; margin-top: -5px; }
 .card h3.grp { font-family: var(--display); font-size: 16px; margin: 4px 0 -2px; color: var(--accent); }
 .due.today li.sub .grow { color: var(--muted); }
 .chev { color: var(--muted); font-weight: 700; }
@@ -183,7 +183,9 @@ details > summary { cursor: pointer; font-family: var(--display); font-weight: 6
 .ag .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ag .meta .tag { padding: 2px 6px; }
 .ag .txt .mini { align-self: flex-start; margin-top: 6px; }
-.ag .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.ag .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+/* Home « À venir »: her long notes (up to 255 characters) on 2 lines; the agenda page shows them in full. */
+.due.soon .ag b { font-size: 15px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ag .btns .mini { margin-top: 0; }
 .days { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .days .mini { color: var(--bg); }
@@ -256,7 +258,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "26/10 22h14";
+const BUILD = "26/10 22h41";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -348,7 +350,7 @@ function home() {
   const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : it.type === "controle" ? testDays(it) >= 0 && (testDays(it) <= 7 || testDays(it) === SOMEDAY) : dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
   app.innerHTML = `${linkCard()}${askCard()}
     ${soon.length || edtLine(tomorrow) ? `<section class="card" data-m="agenda"><h2>À venir</h2>
-      ${soon.length ? `<ul class="due">${soon.map(agRow).join("")}</ul>` : `<p class="empty">Aucun devoir ni contrôle noté pour les 7 prochains jours.</p>`}
+      ${soon.length ? `<ul class="due soon">${soon.map(agRow).join("")}</ul>` : `<p class="empty">Aucun devoir ni contrôle noté pour les 7 prochains jours.</p>`}
       ${edtLine(tomorrow) ? `<p class="small">Demain (${dayName(tomorrow)}) :</p>${edtLine(tomorrow)}` : ""}</section>` : ""}
     ${scansWaiting ? `<p class="small" id="scanwait">${scansWaiting > 1 ? `${scansWaiting} scans en attente` : "1 scan en attente"} d'envoi : ${scansWaiting > 1 ? "ils partiront" : "il partira"} dès que tu auras du réseau.</p>` : ""}
     ${confond.length ? `<section class="list">${confond.map(f => ficheRow(f, f.subject, false, true)).join("")}</section>` : ""}
