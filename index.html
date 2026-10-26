@@ -88,12 +88,21 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .due li { display: flex; align-items: center; gap: 10px; }
 .due li .grow { flex: 1; min-width: 0; }
 .due.today .grow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.steps { display: flex; gap: 6px; font-size: 13px; font-weight: 700; flex: none; }
-.steps span { border-radius: 999px; padding: 2px 8px; background: var(--chip); color: var(--muted); white-space: nowrap; }
-.steps span.on { background: var(--ok-bg); color: var(--ok); }
+.steps { display: flex; gap: 10px; font-size: 13px; flex: none; }
+.steps span { color: var(--muted); white-space: nowrap; font-weight: 600; }
+.steps span.on { color: var(--ok); }
 .due li.fait .grow { color: var(--muted); text-decoration: line-through; }
 .due.today li.sub { padding-left: 20px; font-size: 14px; margin-top: -5px; }
 .card h3.grp { font-family: var(--display); font-size: 16px; margin: 4px 0 -2px; color: var(--accent); }
+[hidden] { display: none !important; }
+.spark { display: flex; align-items: flex-end; gap: 2px; height: 28px; flex: none; }
+.spark i { width: 5px; border-radius: 2px; background: var(--accent); }
+.spark i.ok { background: var(--ok); }
+.spark i.low { opacity: .45; }
+.tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.tabs button { font: inherit; font-size: 15px; font-weight: 700; padding: 7px 12px; border-radius: 999px; border: 2px solid var(--line); background: transparent; color: var(--fg); white-space: nowrap; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.empty-tile span { color: var(--accent); font-weight: 700; }
 .dayhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .dayprog { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; }
 .dayprog > div { height: 100%; background: var(--ok); border-radius: 3px; }
@@ -234,7 +243,7 @@ button.main:disabled { opacity: .5; cursor: default; }
 .chart-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .chart-h span { font-family: var(--body); font-weight: 400; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .col { flex: 1; max-width: 56px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; position: relative; }
-.col i { font-style: normal; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.col i { font-style: normal; font-size: 12px; white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
 .col div { width: 100%; border-radius: 6px 6px 0 0; background: var(--accent); }
 .col div.low { opacity: .45; }
 .col div.goal-ok { background: var(--ok); }
@@ -273,7 +282,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "27/10 00h07";
+const BUILD = "27/10 00h20";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -385,7 +394,7 @@ function home() {
         if (!open) return head;
         return `${head}
       <ul class="due today">${shown.map(d => `<li data-m="${d.s.key}" class="lnk${d.read && d.ok ? " fait" : ""}" role="button" tabindex="0" data-go="${d.trapOnly ? "fp-" + esc(d.trapOnly.id) : themeGo(d.s, d.theme)}"><span class="dot"></span><span class="grow">${esc(d.theme)}</span>
-        <span class="steps"><span class="${d.read ? "on" : ""}">Fiche${d.read ? " ✓" : ""}</span><span class="${d.ok ? "on" : ""}">Quiz${d.ok ? " ✓" : ""}</span></span></li>
+        <span class="steps"><span class="${d.read ? "on" : ""}">${d.read ? "✓" : "○"} fiche</span><span class="${d.ok ? "on" : ""}">${d.ok ? "✓" : "○"} quiz</span></span></li>
         ${d.traps.map(p => `<li class="lnk sub" data-m="${p.m}" role="button" tabindex="0" data-go="fp-${esc(p.id)}"><span class="grow">↳ ${esc(p.titre)}</span>${pips(p)}</li>`).join("")}`).join("")}</ul>
       ${all.length > shown.length ? `<button class="more" data-moredue="${sub.key}">${all.length - shown.length > 1 ? `Voir les ${all.length - shown.length} autres notions` : "Voir l'autre notion"}</button>` : ""}
       ${sub === hero ? "" : quizButton(sub, multi, "sec")}`; }).join("")}
@@ -393,15 +402,16 @@ function home() {
       <button class="main" id="moredue">Continuer : ${more.length} notion${more.length > 1 ? "s" : ""} de plus</button>`
       : trapsLeft ? `<p class="small">Bravo ! Il te reste des pièges à fermer : 3 bonnes réponses de suite, dans tes quiz.</p>`
       : `<p class="sent ok">Tout est révisé pour aujourd'hui ✓</p>`) : `
-      <p class="small">${left.length ? "Touche une notion ou un piège (↳) pour relire sa fiche, puis fais ton quiz : chaque notion réussie se coche." : "Quiz réussi ! Touche les notions sans « Fiche ✓ » pour relire leur fiche."}</p>`}</section>`
+      ${!left.length ? `<p class="small">Quiz réussi ! Touche les notions sans « ✓ fiche » pour relire leur fiche.</p>` : helpDay() ? `<p class="small">Touche une notion ou un piège (↳) pour relire sa fiche, puis fais ton quiz : chaque notion réussie se coche.</p>` : ""}`}</section>`
       : todo.length ? `<p class="empty">Rien à revoir, ${todo.length} quiz ${todo.length > 1 ? "t'attendent" : "t'attend"}.</p>`
       : `<p class="empty">Rien à faire aujourd'hui. Bravo !</p>`}
     ${rest.length ? `<section class="list"><h2>${exam && rest.every(q => QUIZ[q.id].subject.key === exam.matiere) ? `Pour ton contrôle ${exam.date === TODAY ? "d'aujourd'hui" : "de demain"}` : due.length ? "Autres quiz" : "Quiz à faire"}</h2>${rest.slice(0, allQuiz ? rest.length : 2).map(quizRow).join("")}
       ${rest.length > 2 && !allQuiz ? `<button class="more" id="more">${rest.length > 3 ? `Voir les ${rest.length - 2} autres quiz` : "Voir l'autre quiz"}</button>` : ""}</section>` : ""}
     <button class="main" data-go="scan">Scanner un document</button>
     <section class="list"><h2>Tes matières</h2><div class="tiles">${DATA.subjects.map(s => `
-      <button class="tile" data-m="${s.key}" data-go="m-${s.key}"><b>${esc(s.name)}</b>
-      <span>${((n) => `${n} fiche${n > 1 ? "s" : ""}`)(s.fiches.filter(f => liveCards(f, s).length).length)} · ${s.quizzes.length} quiz</span></button>`).join("")}</div></section>
+      ${!s.fiches.length && !s.quizzes.length && s.scan !== false ? `<button class="tile empty-tile" data-m="${s.key}" data-go="scan-${s.key}"><b>${esc(s.name)}</b><span>Scanne ton premier cours ›</span></button>`
+      : `<button class="tile" data-m="${s.key}" data-go="m-${s.key}"><b>${esc(s.name)}</b>
+      <span>${((n) => `${n} fiche${n > 1 ? "s" : ""}`)(s.fiches.filter(f => liveCards(f, s).length).length)} · ${s.quizzes.length} quiz</span></button>`}`).join("")}</div></section>
     ${redo.length ? `<section class="card"><h2>Scan à refaire</h2><ul class="due">${redo.map(s => `
       <li><span class="badge ${s.status === "à refaire" ? "low" : s.status === "traité" ? "good" : "mid"}">${esc(s.status)}</span>
       <span>${esc(s.label)}${s.note ? `<br><span class="small">${esc(s.note)}</span>` : ""}</span></li>`).join("")}</ul></section>` : ""}
@@ -459,6 +469,12 @@ let allQuiz = false;
 // « À réviser aujourd'hui » shows each subject's 3 most urgent notions: unticked first, those carrying her
 // traps ahead (weakest trap first), ticked ones last. The others unfold per subject; the choice outlives re-renders.
 const openDue = new Set();
+// The « how it works » line shows on her first 3 days only.
+function helpDay() {
+  let d = []; try { d = JSON.parse(store.get("help-days") || "[]"); } catch (e) {}
+  if (!d.includes(TODAY) && d.length < 3) { d.push(TODAY); store.set("help-days", JSON.stringify(d)); }
+  return d.includes(TODAY);
+}
 const openGrp = new Set();  // subjects she unfolded on home (the first one is always open)
 function dueShown(due, sub) {
   const trapRank = d => d.traps.length ? Math.min(...d.traps.map(p => p.streak || 0)) : d.trapOnly ? d.trapOnly.streak || 0 : Infinity;
@@ -485,7 +501,7 @@ function cardDone(c, s) {
 const liveCards = (f, s) => f.cards.filter(c => !cardDone(c, s));
 function ficheRow(f, s, all, home) {
   const n = all ? f.cards.length : liveCards(f, s).length;
-  return `<button class="row"${home ? ` data-m="${s.key}"` : ""} data-go="${all ? "fa" : "f"}-${f.id}"><span class="dot"></span><span class="txt"><span>${esc(f.title)}</span><small>${n} fiche${n > 1 ? "s" : ""} à faire défiler${home ? " · " + esc(s.name) : ""}</small></span></button>`;
+  return `<button class="row"${home ? ` data-m="${s.key}"` : ""} data-go="${all ? "fa" : "f"}-${f.id}"><span class="dot"></span><span class="txt"><span>${esc(f.title)}</span><small>${n} carte${n > 1 ? "s" : ""} à faire défiler${home ? " · " + esc(s.name) : ""}</small></span></button>`;
 }
 // ---------- « À réviser aujourd'hui » ----------
 // The day's list is kept on the phone: a notion revised today stays in the list, ticked, instead of vanishing.
@@ -584,12 +600,29 @@ const nextQuiz = s => s.quizzes.filter(q => !QUIZ[q.id].score && (q.title !== "R
 function subjectView(s) {
   setFrame(s.name, s.key, true);
   const live = s.fiches.filter(f => liveCards(f, s).length), done = s.fiches.filter(f => !liveCards(f, s).length);
+  // Notions first (the ones to work on; acquired ones folded), then her one quiz to do, the fiches, and the quizzes
+  // she did, folded under a small chart of their scores.
+  const weak = s.review.filter(r => r.status !== "acquis"), strong = s.review.filter(r => r.status === "acquis");
+  const notion = r => `<li class="lnk" role="button" tabindex="0" data-go="${themeGo(s, r.theme)}"><span class="badge ${r.status === "acquis" ? "good" : r.status === "en cours" ? "mid" : "low"}">${esc(r.status)}</span><span class="grow">${esc(r.theme)}</span><span class="chev">›</span></li>`;
+  const todo = nextQuiz(s), late = !todo && lateQuiz(s);
+  const did = s.quizzes.filter(q => QUIZ[q.id].score), chron = did.slice().sort((a, b) => (parseInt(a.num, 10) || 0) - (parseInt(b.num, 10) || 0)).slice(-12);
+  const pc = q => Math.round(QUIZ[q.id].score[0] / QUIZ[q.id].score[1] * 100);
   app.innerHTML = `
+    ${s.review.length ? `<section class="card"><h2>Tes notions</h2>
+      ${weak.length ? `<ul class="due">${weak.map(notion).join("")}</ul>` : `<p class="empty">Toutes tes notions sont acquises. Bravo !</p>`}
+      ${strong.length ? `<button class="more" id="strong">${strong.length > 1 ? `Voir les ${strong.length} notions acquises` : "Voir la notion acquise"}</button>` : ""}</section>` : ""}
+    <section class="list"><h2>Ton quiz à faire</h2>${todo ? quizRow(todo) : late ? `<p class="small">Ton prochain quiz n'est pas encore prêt. En attendant, refais le dernier :</p>${quizRow(late)}`
+      : s.quizzes.length ? `<p class="empty">Ton prochain quiz arrive dans quelques minutes.</p>` : `<p class="empty">Pas encore de quiz. Scanne un cours pour en avoir un.</p>`}</section>
     ${s.fiches.length ? `<section class="list"><h2>Fiches</h2>${live.map(f => ficheRow(f, s)).join("")}${live.length ? "" : `<p class="empty">Toutes tes fiches sont maîtrisées. Bravo !</p>`}
       ${done.length ? `<button class="more" id="donef">Voir ${done.length > 1 ? `les ${done.length} fiches maîtrisées` : "la fiche maîtrisée"}</button>` : ""}</section>` : ""}
-    <section class="list"><h2>Quiz</h2>${s.quizzes.length ? [nextQuiz(s), ...s.quizzes.filter(q => QUIZ[q.id].score)].filter(Boolean).map(quizRow).join("") : `<p class="empty">Pas encore de quiz. Scanne un cours pour en avoir un.</p>`}</section>
-    ${s.review.length ? `<section class="card"><h2>Tes notions</h2><ul class="due">${s.review.map(r => `
-      <li class="lnk" role="button" tabindex="0" data-go="${themeGo(s, r.theme)}"><span class="badge ${r.status === "acquis" ? "good" : r.status === "en cours" ? "mid" : "low"}">${esc(r.status)}</span><span class="grow">${esc(r.theme)}</span><span class="chev">›</span></li>`).join("")}</ul></section>` : ""}`;
+    ${did.length ? `<section class="list"><h2>Quiz faits</h2>
+      <button class="row" id="didq" aria-expanded="false"><span class="txt"><span>${did.length} quiz faits</span><small>Dernier : ${QUIZ[did[0].id].score.join("/")} · touche pour les voir</small></span>
+        <span class="spark" aria-label="Tes derniers scores">${chron.map(q => `<i class="${pc(q) >= 80 ? "ok" : pc(q) < 60 ? "low" : ""}" style="height:${Math.max(pc(q), 6)}%"></i>`).join("")}</span></button>
+      <div id="didlist" class="list" hidden>${did.map(quizRow).join("")}</div></section>` : ""}`;
+  const st = document.getElementById("strong");
+  if (st) st.onclick = () => { st.outerHTML = `<ul class="due">${strong.map(notion).join("")}</ul>`; wire(); };
+  const dq = document.getElementById("didq");
+  if (dq) dq.onclick = () => { const l = document.getElementById("didlist"); l.hidden = !l.hidden; dq.setAttribute("aria-expanded", !l.hidden); };
   const b = document.getElementById("donef");
   if (b) b.onclick = () => { b.outerHTML = done.map(f => ficheRow(f, s, true)).join(""); wire(); };
   wire();
@@ -749,6 +782,7 @@ function addTestView() {
   };
 }
 let SCAN = null;
+let progTab = null;  // the subject shown on « Tes progrès »
 function progress() {
   setFrame("Tes progrès", null, true);
   const done = DATA.subjects.flatMap(s => s.quizzes.filter(q => q.score).map(q => ({ s, q })));
@@ -758,21 +792,24 @@ function progress() {
   const acquis = themes.filter(r => r.status === "acquis").length;
   const pct = sc => Math.round(sc[0] / sc[1] * 100);
   const bar = r => r.level >= 3 ? "var(--ok)" : r.level >= 1 ? "var(--gold)" : "var(--bad)";
+  const tabs = DATA.subjects.filter(s => s.quizzes.some(q => q.score));
+  const tab = tabs.find(s => s.key === progTab) || tabs[0];
   app.innerHTML = `<div class="stats">
       <div class="stat"><b>${done.length}</b><span>quiz faits</span></div>
       <div class="stat"><b>${Math.round(ok / n * 100)} %</b><span>de bonnes réponses</span></div>
       <div class="stat"><b>${acquis}/${themes.length}</b><span>notions acquises</span></div>
     </div>
     ${piegesCard()}
-    ${DATA.subjects.filter(s => s.quizzes.some(q => q.score)).map(s => {
-      const qs = s.quizzes.filter(q => q.score).sort((a, b) => (parseInt(a.num, 10) || 0) - (parseInt(b.num, 10) || 0));
+    ${tabs.length > 1 ? `<div class="tabs" role="tablist">${tabs.map(s => `<button role="tab" data-m="${s.key}" data-tab="${s.key}" aria-selected="${s === tab}">${esc(s.name)}</button>`).join("")}</div>` : ""}
+    ${[tab].map(s => {
+      const qs = s.quizzes.filter(q => q.score).sort((a, b) => (parseInt(a.num, 10) || 0) - (parseInt(b.num, 10) || 0)).slice(-10);
       const first = pct(qs[0].score), last = pct(qs[qs.length - 1].score);
       const msg = qs.length < 2 ? "Fais le quiz suivant pour voir ta progression."
         : last > first ? `+${last - first} points entre le quiz n°${qs[0].num} et le n°${qs[qs.length - 1].num}. Bravo !`
         : "Les quiz deviennent plus difficiles : c'est normal que ça bouge. Relis les fiches des notions en rouge.";
       return `<section class="card" data-m="${s.key}"><h2 class="chart-h">${esc(s.name)}<span>- - objectif 80 %</span></h2>
         <div class="chart" role="img" aria-label="Scores des quiz ${esc(s.name)}"><div class="goal"></div>
-          ${qs.map(q => `<div class="col"><i>${pct(q.score)} %</i><div class="${pct(q.score) >= 80 ? "goal-ok" : pct(q.score) < 60 ? "low" : ""}" style="height:${Math.max(pct(q.score), 3)}%"></div></div>`).join("")}</div>
+          ${qs.map(q => `<div class="col"><i>${pct(q.score)}${qs.length <= 6 ? " %" : ""}</i><div class="${pct(q.score) >= 80 ? "goal-ok" : pct(q.score) < 60 ? "low" : ""}" style="height:${Math.max(pct(q.score), 3)}%"></div></div>`).join("")}</div>
         <div class="cols-x">${qs.map(q => `<span>n°${esc(q.num)}</span>`).join("")}</div>
         <p class="small">${msg}</p>
         <h2>Tes notions</h2>
@@ -784,6 +821,7 @@ function progress() {
     }).join("")}`;
   const mp = document.getElementById("morep");
   if (mp) mp.onclick = () => { allPieges = true; progress(); };
+  app.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { progTab = b.dataset.tab; progress(); });
   wire();
 }
 function scanSubject() {
