@@ -121,14 +121,18 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .q { font-size: 20px; margin: 0; }
 .q b { color: var(--accent); }
 .hint { color: var(--muted); font-size: 16px; margin: -6px 0 0; }
+.audio { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.audio .sec { flex: 1 1 auto; }
+.heard { margin-top: 8px; font-size: 16px; color: var(--muted); }
+.heard b { color: var(--fg); }
 .opts { display: flex; flex-direction: column; gap: 8px; }
 .opt { font: inherit; text-align: left; padding: 11px 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
 .opt[aria-pressed="true"] { border-color: var(--fg); }
 .opt.right { border-color: var(--ok); background: var(--ok-bg); }
 .opt.wrong { border-color: var(--bad); background: var(--bad-bg); }
 .opt:disabled { cursor: default; }
-input[type=text] { font: inherit; font-size: 22px; width: 100%; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--bg); color: var(--fg); }
-input[type=text]:focus { outline: none; border-color: var(--fg); }
+input[type=text], textarea { font: inherit; font-size: 22px; width: 100%; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--bg); color: var(--fg); }
+input[type=text]:focus, textarea:focus { outline: none; border-color: var(--fg); }
 input.right { border-color: var(--ok); background: var(--ok-bg); }
 input.wrong { border-color: var(--bad); background: var(--bad-bg); }
 .keys { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -185,7 +189,7 @@ details > summary { cursor: pointer; font-family: var(--display); font-weight: 6
 .days .mini { color: var(--bg); }
 .tile.on { background: var(--accent); color: #fff; }
 #nday { font: inherit; padding: 8px 10px; border-radius: 10px; border: 2px solid var(--line); background: var(--bg); color: var(--fg); }
-#ntitle { font-size: 17px; }
+#ntitle { font-size: 17px; resize: vertical; }
 button.main:disabled { opacity: .5; cursor: default; }
 .ag .mini.alt { background: transparent; color: var(--fg); border: 2px solid var(--line); }
 .ag.late .meta { color: var(--bad); font-weight: 700; }
@@ -252,7 +256,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "26/10 16h04";
+const BUILD = "26/10 22h14";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -278,8 +282,8 @@ function badge(q) {
 const stack = [];
 let updateReady = false;  // a new version is waiting: loaded when she is back on the home page
 let shownView = null;  // a background refresh redraws the same view: keep where she has scrolled to
-function go(token) { if (token) stack.push(token); else stack.length = 0; shownView = null; render(); }
-back.onclick = () => { stack.pop(); render(); };
+function go(token) { hush(); if (token) stack.push(token); else stack.length = 0; shownView = null; render(); }
+back.onclick = () => { hush(); stack.pop(); render(); };
 
 function render() {
   const t = stack[stack.length - 1] || "";
@@ -341,7 +345,7 @@ function home() {
   // Her « Ce que tu confonds encore » fiche (rewritten after each missed quiz) sits under the test reminder on
   // test days only; the rest of the time her traps lead to it.
   const confond = exam ? [FICHE[exam.matiere + "-a-revoir"]].filter(f => f && liveCards(f, f.subject).length) : [];
-  const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : it.type === "controle" ? testDays(it) >= 0 && testDays(it) <= 7 : dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
+  const soon = agItems().filter(it => it.type === "devoir" ? !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7 : it.type === "controle" ? testDays(it) >= 0 && (testDays(it) <= 7 || testDays(it) === SOMEDAY) : dayDiff(it.date) >= 0 && dayDiff(it.date) <= 7);
   app.innerHTML = `${linkCard()}${askCard()}
     ${soon.length || edtLine(tomorrow) ? `<section class="card" data-m="agenda"><h2>À venir</h2>
       ${soon.length ? `<ul class="due">${soon.map(agRow).join("")}</ul>` : `<p class="empty">Aucun devoir ni contrôle noté pour les 7 prochains jours.</p>`}
@@ -601,14 +605,19 @@ const DAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "sa
 const dayDiff = iso => Math.round((Date.parse(iso + "T12:00:00Z") - Date.parse(TODAY + "T12:00:00Z")) / 864e5);
 const dayName = iso => DAYS[new Date(iso + "T12:00:00Z").getUTCDay()];
 function dayLabel(iso) {
+  if (!iso) return "date à préciser";  // a test she knows is coming, date not given yet
   const d = dayDiff(iso), dm = iso.slice(8, 10) + "/" + iso.slice(5, 7);
   return d < 0 ? `en retard (${dayName(iso)} ${dm})` : d === 0 ? "aujourd'hui" : d === 1 ? "demain" : `${dayName(iso)} ${dm}`;
 }
-const agAll = () => ((DATA.agenda && DATA.agenda.items) || []).slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.type === "controle" ? -1 : 1));
+const agKey = it => it.date || "9999";  // undated tests after the dated ones
+const agAll = () => ((DATA.agenda && DATA.agenda.items) || []).slice().sort((a, b) => agKey(a) < agKey(b) ? -1 : agKey(a) > agKey(b) ? 1 : (a.type === "controle" ? -1 : 1));
 const agItems = () => agAll().filter(it => !it.ask);  // unclear lines wait for her answer first
 // A test is behind her once ticked « passé », or from 16:00 (Luxembourg) on its day: home goes back to normal.
 const luxHour = () => +new Date().toLocaleString("en-GB", { timeZone: "Europe/Luxembourg", hour: "2-digit", hourCycle: "h23" });
-const testDays = it => it.type === "controle" && !it.done && (dayDiff(it.date) > 0 || dayDiff(it.date) === 0 && luxHour() < 16) ? dayDiff(it.date) : -1;
+// An undated test is ahead until she ticks it « passé » (SOMEDAY: not soon enough for the test-only home).
+const SOMEDAY = 99;
+const testDays = it => it.type !== "controle" || it.done ? -1 : !it.date ? SOMEDAY
+  : dayDiff(it.date) > 0 || dayDiff(it.date) === 0 && luxHour() < 16 ? dayDiff(it.date) : -1;
 // Lines the cloud job could not place for sure: it asks her (it.ask = { q, quote, options: [{ label, set }] }).
 function askCard() {
   const asks = agAll().filter(it => it.ask);
@@ -619,8 +628,8 @@ function askCard() {
 function agRow(it) {
   const s = SUBJ[it.matiere], d = dayDiff(it.date), late = d < 0 && !it.done;
   const prep = it.quiz && QUIZ[it.quiz] && !QUIZ[it.quiz].score;
-  const wait = it.type === "controle" && s && !it.quiz && !it.done && d >= 0 && d <= 3;
-  const passed = it.type === "controle" && !it.done && d <= 0;  // test day: she says it is behind her
+  const wait = it.type === "controle" && s && !it.quiz && !it.done && (d >= 0 && d <= 3 || !it.date);
+  const passed = it.type === "controle" && !it.done && (d <= 0 || !it.date);  // test day: she says it is behind her
   const what = s ? s.name : it.autre;
   return `<li class="ag${it.done ? " done" : ""}${late ? " late" : ""}" data-m="${s ? s.key : "agenda"}">
     ${it.type === "devoir" ? `<button class="chk" data-ag="${esc(it.id)}" aria-pressed="${!!it.done}" aria-label="Fait">✓</button>` : ""}
@@ -660,7 +669,7 @@ function edtLine(iso) {
 }
 function agendaView() {
   setFrame("Ton agenda", null, true);
-  const items = agItems().filter(it => dayDiff(it.date) >= 0 || (it.type === "devoir" && !it.done && dayDiff(it.date) >= -14));
+  const items = agItems().filter(it => (it.date ? dayDiff(it.date) >= 0 : !it.done) || (it.type === "devoir" && !it.done && dayDiff(it.date) >= -14));
   const edt = DATA.agenda && DATA.agenda.edt;
   app.innerHTML = `${askCard()}<section class="card" data-m="agenda"><h2>Devoirs et contrôles</h2>
       ${items.length ? `<ul class="due">${items.map(agRow).join("")}</ul>` : `<p class="empty">Rien de noté. Scanne ton carnet pour remplir ton agenda.</p>`}</section>
@@ -673,6 +682,8 @@ function agendaView() {
 // She notes a test herself: subject, day, and what it is on. It is saved at once on the phone (offline too)
 // and sent like her other writes; a test within 3 days gets its revision quiz from the cloud job.
 const NEWT = { m: null, date: null, title: "" };
+const NO_TESTS = ["ia"];  // no school tests in IA & vibe coding
+const TITLE_MAX = 255;  // what Code.gs keeps (addAgenda_)
 function addTestView() {
   setFrame("Ajouter un contrôle", null, true);
   const days = [];
@@ -680,15 +691,16 @@ function addTestView() {
     const iso = new Date(Date.parse(TODAY + "T12:00:00Z") + i * 864e5).toISOString().slice(0, 10);
     if (!/^(samedi|dimanche)$/.test(dayName(iso))) days.push(iso);
   }
-  const ok = NEWT.m && NEWT.date;
+  const ok = NEWT.m && NEWT.date !== null;  // "" = she does not know the day yet
   app.innerHTML = `<section class="card"><h2>1. En quelle matière ?</h2>
-      <div class="tiles">${DATA.subjects.map(s => `<button class="tile${NEWT.m === s.key ? " on" : ""}" data-m="${s.key}" data-pick="${s.key}" aria-pressed="${NEWT.m === s.key}"><b>${esc(s.name)}</b></button>`).join("")}</div></section>
+      <div class="tiles">${DATA.subjects.filter(s => !NO_TESTS.includes(s.key)).map(s => `<button class="tile${NEWT.m === s.key ? " on" : ""}" data-m="${s.key}" data-pick="${s.key}" aria-pressed="${NEWT.m === s.key}"><b>${esc(s.name)}</b></button>`).join("")}</div></section>
     <section class="card"${NEWT.m ? ` data-m="${NEWT.m}"` : ""}><h2>2. Quel jour ?</h2>
-      <div class="days">${days.map(d => `<button class="mini${NEWT.date === d ? "" : " alt"}" data-day="${d}">${dayLabel(d)}</button>`).join("")}</div>
+      <div class="days">${days.map(d => `<button class="mini${NEWT.date === d ? "" : " alt"}" data-day="${d}">${dayLabel(d)}</button>`).join("")}
+        <button class="mini${NEWT.date === "" ? "" : " alt"}" data-day="" id="nodate">Je ne sais pas encore</button></div>
       <label class="small" for="nday">Plus tard :</label> <input type="date" id="nday" min="${TODAY}" value="${NEWT.date && !days.includes(NEWT.date) ? NEWT.date : ""}"></section>
     <section class="card"><h2>3. Sur quoi ? <span class="small">(si tu sais)</span></h2>
-      <input type="text" id="ntitle" maxlength="120" placeholder="Ex. : les fonctions S, COD, COI" value="${esc(NEWT.title)}"></section>
-    <button class="main" id="nadd"${ok ? "" : " disabled"}>${ok ? `Ajouter : ${esc(SUBJ[NEWT.m].name)}, ${dayLabel(NEWT.date)}` : "Choisis la matière et le jour"}</button>`;
+      <textarea id="ntitle" maxlength="${TITLE_MAX}" rows="3" placeholder="Ex. : une écoute ; les fonctions S, COD, COI">${esc(NEWT.title)}</textarea></section>
+    <button class="main" id="nadd"${ok ? "" : " disabled"}>${ok ? `Ajouter : ${esc(SUBJ[NEWT.m].name)}, ${NEWT.date ? dayLabel(NEWT.date) : "date à préciser"}` : "Choisis la matière et le jour"}</button>`;
   const keep = () => { NEWT.title = document.getElementById("ntitle").value; };
   app.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => { keep(); NEWT.m = b.dataset.pick; addTestView(); });
   app.querySelectorAll("[data-day]").forEach(b => b.onclick = () => { keep(); NEWT.date = b.dataset.day; addTestView(); });
@@ -965,6 +977,16 @@ function variant(q, useAlt) {
   if (v.type === "qcm") { const order = shuffle(v.o.map((_, k) => k)); v.o = order.map(k => v.o[k]); if (v.w) v.w = order.map(k => v.w[k]); v.a = order.indexOf(v.a); }
   return v;
 }
+// Listening questions (q.audio = a German text): the phone reads it aloud, the text shows only at the correction.
+const canSpeak = () => "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+function speak(text, rate) {
+  if (!canSpeak()) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text), v = speechSynthesis.getVoices().find(x => /^de(-|_|$)/i.test(x.lang));
+  u.lang = "de-DE"; if (v) u.voice = v; u.rate = rate;
+  speechSynthesis.speak(u);
+}
+function hush() { if ("speechSynthesis" in window) speechSynthesis.cancel(); }
 function secondChance(quiz, missed) {
   Z = { quiz, retry: true, qs: missed.map(q => variant(q, true)), i: 0, answers: [], fixed: 0, total: missed.length };
   show();
@@ -984,6 +1006,8 @@ function show() {
   app.innerHTML = `<div class="flag" aria-hidden="true"><div style="width:${(Z.retry ? Z.fixed / Z.total : i / Z.qs.length) * 100}%"></div></div>
     <section class="card">
     <span class="chip">${Z.retry ? "2e chance · " : ""}${esc(q.t)}</span>
+    ${q.audio ? canSpeak() ? `<div class="audio"><button class="sec" id="play">▶ Écouter</button><button class="mini alt" id="slow">Plus lentement</button></div>`
+      : `<p class="hint">Ton téléphone ne peut pas lire à voix haute : lis le texte.</p><p class="heard">${esc(q.audio)}</p>` : ""}
     <p class="q">${q.html ? q.q : esc(q.q).replaceAll("___", "<b>___</b>")}</p>
     ${q.h ? `<p class="hint">(${esc(q.h)})</p>` : ""}
     ${body}
@@ -1009,6 +1033,10 @@ function show() {
     inp.focus();
   }
   act.onclick = () => Z.checked ? next() : check();
+  if (q.audio && canSpeak()) {
+    document.getElementById("play").onclick = () => speak(q.audio, .9);
+    document.getElementById("slow").onclick = () => speak(q.audio, .65);
+  }
 }
 function check() {
   const { quiz, i } = Z, q = Z.qs[i];
@@ -1034,11 +1062,12 @@ function check() {
   document.getElementById("fb").innerHTML = ok
     ? `<div class="fb ok"><strong>Juste !</strong>${esc(q.r)}${pg}</div>`
     : `<div class="fb ko"><strong>Réponse : ${esc(right)}</strong>${why ? `<span class="why">${esc(why)}</span><span class="rule">À retenir : ${esc(q.r)}</span>` : esc(q.r)}${pg}</div>`;
+  if (q.audio && canSpeak()) document.getElementById("fb").insertAdjacentHTML("beforeend", `<p class="heard"><b>Ce que tu as entendu :</b> ${esc(q.audio)}</p>`);
   const act = document.getElementById("act");
   act.textContent = i < Z.qs.length - 1 ? "Suivant" : Z.retry ? "Terminer" : "Voir ton résultat";
   act.focus();
 }
-function next() { Z.i++; Z.i < Z.qs.length ? show() : Z.retry ? retryDone() : result(); }
+function next() { hush(); Z.i++; Z.i < Z.qs.length ? show() : Z.retry ? retryDone() : result(); }
 function retryDone() {
   const { total } = Z;
   count.textContent = "Terminé"; fitTitle();
