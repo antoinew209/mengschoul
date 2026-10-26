@@ -252,7 +252,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "26/10 15h53";
+const BUILD = "26/10 16h04";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -331,6 +331,8 @@ function home() {
   const trapsLeft = allDone && !more.length && activePieges().some(p => mine(SUBJ[p.m]));
   // Under each subject of the day: its one quiz to do (a real 20-question quiz), or when the next one comes.
   const quizButton = (sub, multi) => { const q = nextQuiz(sub); return q ? `<button class="main" data-go="q-${q.id}">Faire le quiz n°${esc(q.num)}${multi ? " · " + esc(sub.name) : ""}</button>`
+    : lateQuiz(sub) ? `<p class="small">Ton prochain quiz${multi ? " de " + esc(sub.name) : ""} n'est pas encore prêt. En attendant, refais le dernier :</p>
+      <button class="main" data-go="q-${lateQuiz(sub).id}">Refaire le quiz n°${esc(lateQuiz(sub).num)}${multi ? " · " + esc(sub.name) : ""}</button>`
     : `<p class="small">Ton prochain quiz${multi ? " de " + esc(sub.name) : ""} arrive dans quelques minutes.</p>`; };
   const multi = new Set(due.map(d => d.s.key)).size > 1;  // one subject: its colour dot says it
   const todo = DATA.subjects.filter(mine).map(nextQuiz).filter(Boolean);
@@ -536,6 +538,11 @@ const themeGo = (s, theme) => esc(themeCard(s, theme) ? `nt-${s.key}~${encodeURI
 const testAhead = s => agItems().some(it => it.matiere === s.key && testDays(it) >= 0);
 // One quiz to do per subject: the newest one (built on her latest mistakes). Older undone ones stay out of sight;
 // a new quiz from the cloud job replaces the newest one.
+// The cloud job writes her next quiz a few minutes after a result. If it has not come 20 minutes later (job down,
+// usage limit reached), she redoes her latest quiz instead of waiting with nothing to do.
+const WAIT_MS = 20 * 60e3;
+const lateQuiz = s => Date.now() - +(store.get("doneAt-" + s.key) || 0) < WAIT_MS ? null
+  : s.quizzes.filter(q => QUIZ[q.id].score).sort((a, b) => (parseInt(b.num, 10) || 0) - (parseInt(a.num, 10) || 0))[0] || null;
 const nextQuiz = s => s.quizzes.filter(q => !QUIZ[q.id].score && (q.title !== "Révisions avant contrôle" || testAhead(s)))
   .sort((a, b) => (parseInt(b.num, 10) || 0) - (parseInt(a.num, 10) || 0))[0] || null;
 function subjectView(s) {
@@ -1161,6 +1168,7 @@ function result() {
   document.getElementById("home").onclick = () => go("");
   const payload = { quiz: quiz.id, matiere: quiz.subject.folder, num: quiz.num, scores: Object.fromEntries(per.map(p => [p.t, [p.ok, p.n]])), texte, pieges: hits, sid: Date.now() + "-" + quiz.id };
   outbox.add(payload);
+  store.set("doneAt-" + quiz.subject.key, Date.now());
   // She sees the consequences at once, before the server answers (or offline): her notions' levels, her traps'
   // dots, the quiz marked done. The server applies the same rules; its answer then replaces these values.
   const before = {}, firstTry = !quiz.score || quiz.express;
