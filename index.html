@@ -103,6 +103,28 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .tabs button { font: inherit; font-size: 15px; font-weight: 700; padding: 7px 12px; border-radius: 999px; border: 2px solid var(--line); background: transparent; color: var(--fg); white-space: nowrap; cursor: pointer; }
 .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .empty-tile span { color: var(--accent); font-weight: 700; }
+#nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; display: grid; grid-template-columns: repeat(5, 1fr); background: var(--card); border-top: 1px solid var(--line);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px)); }
+#nav button { font: inherit; font-size: 11px; font-weight: 700; color: var(--muted); background: none; border: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; padding: 4px 0; }
+#nav svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#nav button[aria-current="page"] { color: var(--fg); }
+body.hasnav main { padding-bottom: 76px; }
+.strip { font: inherit; color: var(--fg); text-align: left; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 14px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.strip .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.strip b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip .tag { font-size: 10px; padding: 3px 5px; }
+.strip small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip .cd { flex: none; font-size: 13px; font-weight: 700; background: var(--chip); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.mission .step { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 12px 16px; font-size: 17px; }
+.mission .step small { font-size: 14px; font-weight: 600; opacity: .7; }
+.link { font: inherit; font-size: 15px; font-weight: 700; background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 0; text-align: left; }
+.legend { display: flex; gap: 14px; font-size: 13px; color: var(--muted); margin: 0; }
+.legend .ok, .nl .n-ok .st { color: var(--ok); }
+.subj { gap: 6px; }
+.subj .grp-row { border-top: 0; padding-top: 0; }
+.nl li .st { width: 22px; flex: none; text-align: center; font-size: 18px; font-weight: 700; color: var(--muted); }
+.nl li.n-half .st { color: var(--gold); }
+.nl li.n-ok .grow { color: var(--muted); text-decoration: line-through; }
 .dayhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .dayprog { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; }
 .dayprog > div { height: 100%; background: var(--ok); border-radius: 3px; }
@@ -282,7 +304,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "27/10 10h32";
+const BUILD = "27/10 11h01";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -315,6 +337,8 @@ function render() {
   const t = stack[stack.length - 1] || "";
   if (t !== shownView) { window.scrollTo(0, 0); shownView = t; }
   count.textContent = "";
+  navBar(t);
+  if (t === "matieres") return matieresView();
   if (t.startsWith("m-") && SUBJ[t.slice(2)]) return subjectView(SUBJ[t.slice(2)]);
   if (t.startsWith("q-") && QUIZ[t.slice(2)]) return quizIntro(QUIZ[t.slice(2)]);
   if (t.startsWith("f-") && FICHE[t.slice(2)]) return ficheView(FICHE[t.slice(2)]);
@@ -345,7 +369,103 @@ function fitTitle() {
 addEventListener("resize", fitTitle);
 function wire() { app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go)); }
 
+
+// ---------- home, version 2 (since 27/10; localStorage home2=0 brings the old home back) ----------
+// One next step at a time (read the fiches of the day, then the quiz), the tests as one-line strips, one card per
+// subject with one line per notion, and a tab bar at the bottom for the rest of the app.
+const home2On = () => store.get("home2") !== "0";
+const NAV = [["", "Aujourd'hui", "M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z"], ["matieres", "Matières", "M4 4h7v16H4zM13 4h7v16h-7z"],
+  ["scan", "Scanner", "M4 8h3l2-3h6l2 3h3v11H4zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"], ["agenda", "Agenda", "M4 6h16v14H4zM4 10h16M8 3v5M16 3v5"],
+  ["progres", "Progrès", "M4 20V10M10 20V4M16 20v-8M22 20H2"]];
+function navBar(t) {
+  let nav = document.getElementById("nav");
+  if (!home2On()) { if (nav) nav.remove(); document.body.classList.remove("hasnav"); return; }
+  if (!nav) { nav = document.createElement("nav"); nav.id = "nav"; document.body.appendChild(nav); }
+  const top = NAV.some(n => n[0] === t);
+  nav.hidden = !top; document.body.classList.toggle("hasnav", top);
+  nav.innerHTML = NAV.map(([k, label, d]) => `<button data-nav="${k}" aria-current="${k === t ? "page" : "false"}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg><span>${label}</span></button>`).join("");
+  nav.querySelectorAll("[data-nav]").forEach(b => b.onclick = () => { stack.length = 0; if (b.dataset.nav) stack.push(b.dataset.nav); shownView = null; render(); });
+}
+function matieresView() {
+  setFrame("Tes matières", null, false);
+  app.innerHTML = `<div class="tiles">${DATA.subjects.map(s => !s.fiches.length && !s.quizzes.length && s.scan !== false
+    ? `<button class="tile empty-tile" data-m="${s.key}" data-go="scan-${s.key}"><b>${esc(s.name)}</b><span>Scanne ton premier cours ›</span></button>`
+    : `<button class="tile" data-m="${s.key}" data-go="m-${s.key}"><b>${esc(s.name)}</b><span>${((n) => `${n} fiche${n > 1 ? "s" : ""}`)(s.fiches.filter(f => liveCards(f, s).length).length)} · ${s.quizzes.length} quiz</span></button>`).join("")}</div>`;
+  wire();
+}
+function home2() {
+  if (updateReady) { updateReady = false; try { sessionStorage.setItem("upd-at", Date.now()); } catch (e) {} return location.reload(); }
+  setFrame("Aujourd'hui", null, false);
+  const exam = agItems().find(it => SUBJ[it.matiere] && testDays(it) >= 0 && testDays(it) <= 1);
+  const ALWAYS = ["allemand"];
+  const mine = s => !exam || s.key === exam.matiere || ALWAYS.includes(s.key);
+  const due = todayDue(mine), allDone = due.every(d => d.read && d.ok);
+  const more = allDone ? moreDue(mine) : [];
+  const trapsLeft = allDone && !more.length && activePieges().some(p => mine(SUBJ[p.m]));
+  const urg = s => Math.min(999, ...agItems().filter(it => it.matiere === s.key).map(testDays).filter(d => d >= 0));
+  const isExam = s => exam && s.key === exam.matiere;
+  const order = [...new Set(due.map(d => d.s))].sort((a, b) => isExam(b) - isExam(a) || urg(a) - urg(b));
+  // Subjects with a quiz to do but nothing to revise today get a folded card too (no more « Autres quiz »).
+  const extra = DATA.subjects.filter(s => mine(s) && !order.includes(s) && nextQuiz(s));
+  const doneN = due.filter(d => d.read && d.ok).length;
+  // The next step: in the first subject not finished, the first fiche not read yet, else its quiz.
+  const stepOf = s => {
+    const all = dueShown(due, s).all, q = nextQuiz(s) || lateQuiz(s);
+    if (all.every(d => d.read && d.ok)) return null;
+    const unread = all.find(d => !d.read && !d.trapOnly);
+    if (unread) return { s, go: themeGo(s, unread.theme), label: `Relis la fiche « ${unread.theme} »`,
+      sub: `${all.filter(d => d.read).length}/${all.length} fiches lues${q ? ` · ensuite le quiz n°${q.num}` : " · ton quiz est en préparation"}`, quiz: q };
+    if (q) return { s, go: "q-" + q.id, label: `${nextQuiz(s) ? "Fais" : "Refais"} le quiz n°${q.num} · ${s.name}`, sub: `${q.questions.length} questions · environ ${Math.max(5, Math.round(q.questions.length / 2))} minutes` };
+    return { s, wait: true };
+  };
+  const step = order.map(stepOf).find(Boolean) || null;
+  const tests = agItems().filter(it => it.type === "controle" && testDays(it) >= 0 && (testDays(it) <= 7 || testDays(it) === SOMEDAY)).slice(0, 2);
+  const devoirs = agItems().filter(it => it.type === "devoir" && !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7);
+  const redo = DATA.scans.filter(sc => sc.status === "à refaire");
+  const strip = it => { const d = testDays(it), s = SUBJ[it.matiere];
+    return `<button class="strip" data-m="${s ? s.key : "agenda"}" data-go="${it.quiz && QUIZ[it.quiz] ? "q-" + esc(it.quiz) : "agenda"}">
+      <span class="grow"><b>Contrôle · ${esc(s ? s.name : it.autre || "")} · ${!it.date ? "date à préciser" : d >= 2 && d <= 6 ? dayName(it.date) : dayLabel(it.date)}</b><small>${esc(it.title)}</small></span>
+      ${it.date && d >= 2 ? `<span class="cd">dans ${d} jours</span>` : d === 1 ? `<span class="cd">demain</span>` : d === 0 ? `<span class="cd">aujourd'hui</span>` : ""}</button>`; };
+  const state = d => d.read && d.ok ? ["ok", "✓", "réussie"] : d.read ? ["half", "◐", "fiche lue"] : ["todo", "○", "à revoir"];
+  const card = s => {
+    const { all, shown } = dueShown(due, s), q = nextQuiz(s), late = lateQuiz(s), ok = all.filter(d => d.read && d.ok).length;
+    const open = s === (step && step.s) || ALWAYS.includes(s.key) || openGrp.has(s.key) || order.length + extra.length === 1;
+    const sumQ = q ? "quiz n°" + esc(q.num) : late ? "refais le n°" + esc(late.num) : "quiz en préparation";
+    const head = `<div class="grp-row${open ? " open" : ""}" role="button" tabindex="0" data-grp="${s.key}" aria-expanded="${open}"><h3 class="grp" data-m="${s.key}">${esc(s.name)}</h3>
+      <span class="small">${all.length ? `${ok}/${all.length} ✓ · ` : ""}${sumQ}</span><span class="chev" aria-hidden="true">›</span></div>`;
+    if (!open) return `<section class="card subj" data-m="${s.key}">${head}</section>`;
+    return `<section class="card subj" data-m="${s.key}">${head}
+      ${all.length ? `<ul class="due today nl">${shown.map(d => { const [c, ic, t] = state(d); return `<li class="lnk n-${c}" data-m="${d.s.key}" role="button" tabindex="0" data-go="${d.trapOnly ? "fp-" + esc(d.trapOnly.id) : themeGo(d.s, d.theme)}"><span class="st" title="${t}">${ic}</span><span class="grow">${esc(d.theme)}</span></li>
+        ${d.traps.map(p => `<li class="lnk sub" data-m="${p.m}" role="button" tabindex="0" data-go="fp-${esc(p.id)}"><span class="grow">↳ ${esc(p.titre)}</span>${pips(p)}</li>`).join("")}`; }).join("")}</ul>
+      ${all.length > shown.length ? `<button class="more" data-moredue="${s.key}">${all.length - shown.length > 1 ? `Voir les ${all.length - shown.length} autres notions` : "Voir l'autre notion"}</button>` : ""}` : ""}
+      ${step && step.s === s ? "" : q ? `<button class="sec" data-go="q-${q.id}">Faire le quiz n°${esc(q.num)}</button>` : late ? `<button class="sec" data-go="q-${late.id}">Refaire le quiz n°${esc(late.num)}</button>` : ""}</section>`;
+  };
+  app.innerHTML = `${linkCard()}${askCard()}
+    ${tests.map(strip).join("")}
+    ${scansWaiting ? `<p class="small" id="scanwait">${scansWaiting > 1 ? `${scansWaiting} scans en attente` : "1 scan en attente"} d'envoi : ${scansWaiting > 1 ? "ils partiront" : "il partira"} dès que tu auras du réseau.</p>` : ""}
+    ${due.length || extra.length ? `<section class="card mission"><div class="dayhead"><h2>${allDone ? "Bravo !" : "Ta prochaine étape"}</h2>${due.length ? `<span class="small" id="dayn">${doneN}/${due.length} faites</span>` : ""}</div>
+      ${due.length ? `<div class="dayprog" aria-hidden="true"><div style="width:${Math.round(doneN / due.length * 100)}%"></div></div>` : ""}
+      ${step && !step.wait ? `<button class="main step" data-go="${step.go}"><span>${esc(step.label)}</span><small>${esc(step.sub)}</small></button>
+        ${step.quiz ? `<button class="link" data-go="q-${step.quiz.id}">ou fais tout de suite le quiz n°${esc(step.quiz.num)} ›</button>` : ""}`
+      : step ? `<p class="small">Ton prochain quiz de ${esc(step.s.name)} arrive dans quelques minutes.</p>`
+      : allDone && more.length ? `<p class="small">Ta liste du jour est faite. Continue avec les notions que tu ne maîtrises pas encore.</p><button class="main" id="moredue">Continuer : ${more.length} notion${more.length > 1 ? "s" : ""} de plus</button>`
+      : trapsLeft ? `<p class="small">Il te reste des pièges à fermer : 3 bonnes réponses de suite, dans tes quiz.</p>`
+      : due.length ? `<p class="sent ok">Tout est révisé pour aujourd'hui ✓</p>${extra.length ? `<p class="small">D'autres quiz t'attendent plus bas, si tu veux.</p>` : ""}`
+      : `<p class="small">Rien à revoir aujourd'hui : un quiz t'attend plus bas.</p>`}
+      ${due.length ? `<p class="legend"><span>○ à revoir</span><span>◐ fiche lue</span><span class="ok">✓ réussie</span></p>` : ""}</section>`
+      : `<p class="empty">Rien à faire aujourd'hui. Bravo !</p>`}
+    ${order.map(card).join("")}${extra.map(card).join("")}
+    ${devoirs.length ? `<section class="card" data-m="agenda"><h2>Devoirs</h2><ul class="due">${devoirs.map(agRow).join("")}</ul></section>` : ""}
+    ${redo.length ? `<section class="card"><h2>Scan à refaire</h2><ul class="due">${redo.map(sc => `<li><span class="badge low">${esc(sc.status)}</span><span>${esc(sc.label)}${sc.note ? `<br><span class="small">${esc(sc.note)}</span>` : ""}</span></li>`).join("")}</ul></section>` : ""}
+    <p class="small">Mis à jour le ${esc(DATA.updated)}.</p>`;
+  wire(); wireAgenda(home);
+  app.querySelectorAll("[data-moredue]").forEach(b => b.onclick = () => { openDue.add(b.dataset.moredue); home(); });
+  app.querySelectorAll("[data-grp]").forEach(b => b.onclick = () => { const k = b.dataset.grp; if (openGrp.has(k)) openGrp.delete(k); else openGrp.add(k); saveGrp(); home(); });
+  const md = document.getElementById("moredue");
+  if (md) md.onclick = () => { const st = dayState(); st.due.push(...more); saveDay(st); home(); };
+}
 function home() {
+  if (home2On()) return home2();
   if (updateReady) { updateReady = false; try { sessionStorage.setItem("upd-at", Date.now()); } catch (e) {} return location.reload(); }
   setFrame("Tes révisions", null, false);
   const tomorrow = new Date(Date.parse(TODAY + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
