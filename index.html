@@ -282,7 +282,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "27/10 00h41";
+const BUILD = "27/10 10h32";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -419,7 +419,7 @@ function home() {
     <p class="small">Mis à jour le ${esc(DATA.updated)}.</p>`;
   wire(); wireAgenda(home); moreQuizzes(rest);
   app.querySelectorAll("[data-moredue]").forEach(b => b.onclick = () => { openDue.add(b.dataset.moredue); home(); });
-  app.querySelectorAll("[data-grp]").forEach(b => b.onclick = () => { const k = b.dataset.grp; if (openGrp.has(k)) openGrp.delete(k); else openGrp.add(k); home(); });
+  app.querySelectorAll("[data-grp]").forEach(b => b.onclick = () => { const k = b.dataset.grp; if (openGrp.has(k)) openGrp.delete(k); else openGrp.add(k); saveGrp(); home(); });
   const md = document.getElementById("moredue");
   if (md) md.onclick = () => { const st = dayState(); st.due.push(...more); saveDay(st); home(); };
 
@@ -475,7 +475,9 @@ function helpDay() {
   if (!d.includes(TODAY) && d.length < 3) { d.push(TODAY); store.set("help-days", JSON.stringify(d)); }
   return d.includes(TODAY);
 }
-const openGrp = new Set();  // subjects she unfolded on home (the first one is always open)
+// Subjects she unfolded on home (the first one and Allemand are always open), kept on the phone until the next day.
+const openGrp = (() => { try { const o = JSON.parse(store.get("open-grp") || "{}"); return new Set(o.day === TODAY ? o.keys : []); } catch (e) { return new Set(); } })();
+const saveGrp = () => store.set("open-grp", JSON.stringify({ day: TODAY, keys: [...openGrp] }));
 function dueShown(due, sub) {
   const trapRank = d => d.traps.length ? Math.min(...d.traps.map(p => p.streak || 0)) : d.trapOnly ? d.trapOnly.streak || 0 : Infinity;
   const all = due.filter(d => d.s === sub).map((d, i) => ({ d, i }))
