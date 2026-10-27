@@ -304,7 +304,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "27/10 11h01";
+const BUILD = "27/10 21h38";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -1164,6 +1164,8 @@ function shuffle(xs) {
 }
 // Second-chance copy of a missed question: its `alt` wording when it has one, choices reshuffled.
 function variant(q, useAlt) {
+  // A listening question's `alt` is another question on the same text: her second chance re-asks the one she missed.
+  if (q.audio) useAlt = false;
   const v = { ...q, ...(useAlt && q.alt ? q.alt : {}), base: q, usedAlt: !!(useAlt && q.alt) };
   if (v.usedAlt) { v.w = q.alt.w; v.e = q.alt.e; }  // the main question's explanations do not fit the other sentence
   if (v.type === "qcm") { const order = shuffle(v.o.map((_, k) => k)); v.o = order.map(k => v.o[k]); if (v.w) v.w = order.map(k => v.w[k]); v.a = order.indexOf(v.a); }
