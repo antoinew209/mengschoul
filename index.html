@@ -316,7 +316,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 20h30";
+const BUILD = "28/10 20h49";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -1394,7 +1394,7 @@ function show() {
     <section class="card">
     <span class="chip">${Z.retry ? "2e chance · " : ""}${esc(q.t)}</span>
     ${q.audio ? canSpeak() ? `<div class="audio"><button class="sec" id="play">▶ Vitesse normale</button><button class="sec" id="slow">▶ Plus lentement</button></div>
-      <p class="hint" id="nosound" hidden>Tu n'entends rien ? Enlève le mode silencieux (le petit bouton sur le côté du téléphone), monte le son, puis appuie encore sur ▶.</p>
+      <p class="hint" id="nosound" hidden>Tu n'entends rien ? Enlève le mode silencieux (le petit bouton sur le côté du téléphone : la cloche barrée en haut de l'écran disparaît), monte le son, puis appuie encore sur ▶.</p>
       <p class="hint" id="nogerman" hidden>Ce navigateur n'a pas de voix allemande : le texte serait lu avec un mauvais accent. Sur ordinateur, ouvre le portail avec Microsoft Edge ou Google Chrome, ou bien fais l'écoute sur ton téléphone.</p>`
       : `<p class="hint">Ton téléphone ne peut pas lire à voix haute : lis le texte.</p><p class="heard">${esc(q.audio)}</p>` : ""}
     <p class="q">${q.html ? q.q : esc(q.q).replaceAll("___", "<b>___</b>")}</p>
@@ -1460,6 +1460,8 @@ function check() {
 // Listening like the real test: all the questions of one text on one screen, read first, then 2 listens
 // (each one counted once the voice really starts), then everything is checked together.
 const LISTENS = 2;
+// iPhone and iPad (an iPad says « Mac » but has a touch screen): the silent switch mutes the voice without telling the page.
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
 function listenGroup(i) {
   const q = Z.qs[i];
   if (Z.retry || !q || !q.audio) return null;
@@ -1479,8 +1481,10 @@ function showGroup(g) {
     <section class="card">
     <span class="chip">${esc(g[0].t)} · ${g.length} questions</span>
     ${canSpeak() ? `<p class="small" id="listens">Lis d'abord les ${g.length} questions, puis écoute : tu as ${LISTENS} écoutes, comme au contrôle.</p>
+      ${IOS ? `<p class="hint" id="ioshint">Sur iPhone, enlève d'abord le mode silencieux (cloche barrée en haut de l'écran) : sinon la voix ne sort pas.</p>` : ""}
       <div class="audio"><button class="sec" id="play">▶ Vitesse normale</button><button class="sec" id="slow">▶ Plus lentement</button></div>
-      <p class="hint" id="nosound" hidden>Tu n'entends rien ? Enlève le mode silencieux (le petit bouton sur le côté du téléphone), monte le son, puis appuie encore sur ▶.</p>
+      <button class="link" id="noheard" hidden>Je n'ai rien entendu</button>
+      <p class="hint" id="nosound" hidden>Tu n'entends rien ? Enlève le mode silencieux (le petit bouton sur le côté du téléphone : la cloche barrée en haut de l'écran disparaît), monte le son, puis appuie encore sur ▶.</p>
       <p class="hint" id="nogerman" hidden>Ce navigateur n'a pas de voix allemande : le texte serait lu avec un mauvais accent. Sur ordinateur, ouvre le portail avec Microsoft Edge ou Google Chrome, ou bien fais l'écoute sur ton téléphone.</p>`
       : `<p class="hint">Ton téléphone ne peut pas lire à voix haute : lis le texte.</p><p class="heard">${esc(g[0].audio)}</p>`}
     ${g.map(block).join("")}
@@ -1507,6 +1511,7 @@ function showGroup(g) {
     const left = () => {
       const n = LISTENS - Z.listened, done = !Z.checked && n <= 0;
       ["play", "slow"].forEach(id => { document.getElementById(id).disabled = done; });
+      document.getElementById("noheard").hidden = Z.checked || Z.listened === 0;
       document.getElementById("listens").textContent = Z.checked ? "Réécoute autant que tu veux pour vérifier."
         : done ? "Tu as utilisé tes " + LISTENS + " écoutes : réponds avec ce que tu as retenu." : n === LISTENS ? `Lis d'abord les ${g.length} questions, puis écoute : tu as ${LISTENS} écoutes, comme au contrôle.`
         : `Encore ${n} écoute${n > 1 ? "s" : ""}.`;
@@ -1514,6 +1519,8 @@ function showGroup(g) {
     const play = rate => { if (!Z.checked && Z.listened >= LISTENS) return; speak(g[0].audio, rate, () => { if (!Z.checked) { Z.listened++; left(); } }); };
     document.getElementById("play").onclick = () => play(1);
     document.getElementById("slow").onclick = () => play(.7);
+    // 28/10 : on a muted iPhone the voice « plays » without sound and her 2 listens were gone. She gets it back.
+    document.getElementById("noheard").onclick = () => { hush(); Z.listened = Math.max(0, Z.listened - 1); document.getElementById("nosound").hidden = false; left(); };
     Z.left = left;
     voiceHint();
   }
