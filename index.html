@@ -307,7 +307,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 16h14";
+const BUILD = "28/10 16h35";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -1181,23 +1181,46 @@ const canSpeak = () => "speechSynthesis" in window && "SpeechSynthesisUtterance"
 // The best German voice of the device: natural/online voices first (Edge « Katja / Conrad Online (Natural) », Chrome
 // « Google Deutsch », iPhone « Anna » enhanced), de-DE before de-AT/CH. A computer may have none: then she is told,
 // instead of hearing the text with a French or English accent. Voices load late on computers (voiceschanged).
-function germanVoice() {
-  const score = v => (/natural|neural|online|premium|enhanced|erweitert/i.test(v.name) ? 4 : 0) + (/google/i.test(v.name) ? 3 : 0) + (/^de[-_]DE/i.test(v.lang) ? 1 : 0);
-  return speechSynthesis.getVoices().filter(v => /^de(-|_|$)/i.test(v.lang)).sort((a, b) => score(b) - score(a))[0] || null;
-}
+function germanVoice() { return germanVoices()[0] || null; }
 function voiceHint() {
   const n = document.getElementById("nogerman");
   if (n && canSpeak()) n.hidden = !speechSynthesis.getVoices().length || !!germanVoice();
 }
 if (canSpeak() && speechSynthesis.addEventListener) speechSynthesis.addEventListener("voiceschanged", voiceHint);
+// A dialogue is written « Lena: … Tom: … » (a name opening the text, then coming back): the names are not read, each
+// speaker gets a voice of their own (another German voice, or the same one higher or lower when there is only one).
+function speakParts(text) {
+  const first = /^([A-ZÄÖÜ][a-zäöüß]+): /.exec(text);
+  if (!first) return [{ who: null, text }];
+  const names = [...new Set([...text.matchAll(/(?:^|[.!?…]\s+)([A-ZÄÖÜ][a-zäöüß]+): /g)].map(m => m[1]))];
+  if (names.length < 2) return [{ who: null, text }];
+  const re = new RegExp(`(?:^|(?<=[.!?…])\\s+)(${names.join("|")}): `, "g"), parts = [];
+  let m, last = null, from = 0;
+  while ((m = re.exec(text))) { if (last !== null) parts.push({ who: last, text: text.slice(from, m.index).trim() }); last = m[1]; from = re.lastIndex; }
+  parts.push({ who: last, text: text.slice(from).trim() });
+  return parts.filter(x => x.text);
+}
+function germanVoices() {
+  const score = v => (/natural|neural|online|premium|enhanced|erweitert/i.test(v.name) ? 4 : 0) + (/google/i.test(v.name) ? 3 : 0) + (/^de[-_]DE/i.test(v.lang) ? 1 : 0);
+  return speechSynthesis.getVoices().filter(v => /^de(-|_|$)/i.test(v.lang)).sort((a, b) => score(b) - score(a));
+}
 function speak(text, rate, onStart) {
   if (!canSpeak()) return;
   try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
-  const s = speechSynthesis, u = new SpeechSynthesisUtterance(text), v = germanVoice();
-  u.lang = "de-DE"; if (v) u.voice = v; u.rate = rate;
+  const s = speechSynthesis, parts = speakParts(text), voices = germanVoices(), who = [...new Set(parts.map(x => x.who))];
+  // The best voices that differ in quality tier first: same tier as the narrator, so speakers sound alike in quality.
+  const best = voices.filter(v => /natural|neural|online|premium|enhanced|google/i.test(v.name)), pool = best.length >= 2 ? best : voices;
+  const PITCH = [1, .78, 1.25];
   let started = false;
-  u.onstart = () => { started = true; const n = document.getElementById("nosound"); if (n) n.hidden = true; if (onStart) onStart(); };
-  const go = () => { s.speak(u); if (s.resume) s.resume(); };
+  const us = parts.map(x => {
+    const u = new SpeechSynthesisUtterance(x.text), k = Math.max(0, who.indexOf(x.who));
+    u.lang = "de-DE"; u.rate = rate;
+    if (pool.length) u.voice = pool[k % pool.length];
+    if (pool.length < 2 && x.who) u.pitch = PITCH[k % PITCH.length];  // one German voice only: speakers told apart by pitch
+    return u;
+  });
+  us[0].onstart = () => { started = true; const n = document.getElementById("nosound"); if (n) n.hidden = true; if (onStart) onStart(); };
+  const go = () => { us.forEach(u => s.speak(u)); if (s.resume) s.resume(); };
   if (s.speaking || s.pending) { s.cancel(); setTimeout(go, 150); } else go();
   // Nothing heard: tell her what to check (silent switch, volume).
   setTimeout(() => { const n = document.getElementById("nosound"); if (n && !started && !s.speaking) n.hidden = false; }, 2000);
