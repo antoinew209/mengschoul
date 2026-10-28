@@ -307,7 +307,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 16h35";
+const BUILD = "28/10 16h38";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -1201,7 +1201,7 @@ function speakParts(text) {
   return parts.filter(x => x.text);
 }
 function germanVoices() {
-  const score = v => (/natural|neural|online|premium|enhanced|erweitert/i.test(v.name) ? 4 : 0) + (/google/i.test(v.name) ? 3 : 0) + (/^de[-_]DE/i.test(v.lang) ? 1 : 0);
+  const score = v => (/premium/i.test(v.name) ? 5 : 0) + (/natural|neural|online|enhanced|erweitert|optimiert|verbessert|améliorée?/i.test(v.name) ? 4 : 0) + (/google/i.test(v.name) ? 3 : 0) + (/^de[-_]DE/i.test(v.lang) ? 1 : 0);
   return speechSynthesis.getVoices().filter(v => /^de(-|_|$)/i.test(v.lang)).sort((a, b) => score(b) - score(a));
 }
 function speak(text, rate, onStart) {
@@ -1209,7 +1209,7 @@ function speak(text, rate, onStart) {
   try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
   const s = speechSynthesis, parts = speakParts(text), voices = germanVoices(), who = [...new Set(parts.map(x => x.who))];
   // The best voices that differ in quality tier first: same tier as the narrator, so speakers sound alike in quality.
-  const best = voices.filter(v => /natural|neural|online|premium|enhanced|google/i.test(v.name)), pool = best.length >= 2 ? best : voices;
+  const best = voices.filter(v => /natural|neural|online|premium|enhanced|erweitert|optimiert|verbessert|améliorée?|google/i.test(v.name)), pool = best.length >= 2 ? best : voices;
   const PITCH = [1, .78, 1.25];
   let started = false;
   const us = parts.map(x => {
