@@ -316,7 +316,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 19h03";
+const BUILD = "28/10 19h23";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -1737,6 +1737,16 @@ if ("serviceWorker" in navigator) {
   };
   navigator.serviceWorker.addEventListener("message", e => { if (e.data === "updated") fresh(); });
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadSW) fresh(); });
+  // Back to the app after a while (a phone keeps it open for days): her data is refreshed, the code must follow,
+  // or new content (a schema on a fiche) shows without what draws it. Ask for the page again: the service worker
+  // downloads it and says when it changed; a copy already newer than this one reloads at once.
+  let checkedAt = Date.now();
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || Date.now() - checkedAt < (window.VERSION_TEST ? 0 : 120000)) return;
+    checkedAt = Date.now();
+    fetch(location.pathname, { cache: "no-store" }).then(r => r.text())
+      .then(t => { const m = /const BUILD = "([^"]+)"/.exec(t); if (m && m[1] !== BUILD) fresh(); }).catch(() => {});
+  });
 }
 // Bottom of the page: the app and her data are on this phone, so it opens in airplane mode.
 function airplaneBadge() {
