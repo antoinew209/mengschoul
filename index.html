@@ -307,7 +307,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 17h25";
+const BUILD = "28/10 18h02";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -671,17 +671,24 @@ function todayDue(mine) {
   // « Quiz ✓ » when one quiz of the day passed the notion at 80 % (r.best, best quiz on the server: same on every device),
   // or the day's total did.
   const okToday = (s, t) => { const r = s.review.find(x => x.theme === t); return !!(r && (r.best >= .8 || r.today && r.today[1] && r.today[0] / r.today[1] >= .8)); };
-  const row = (s, t) => { const k = tk(s.key, t); return { s, theme: t, read: !!st.read[k] || !themeCard(s, t), ok: !!st.ok[k] || okToday(s, t) }; };
+  // Work done outside the list counts too (28/10, « 0/5 décourageant » after a 17/20 in maths): a notion passed today
+  // at 80 % joins the list already ticked, in any subject (no fiche to read for it).
+  st.bonus = st.bonus || [];
+  DATA.subjects.forEach(s => s.review.forEach(r => { const k = tk(s.key, r.theme); if (!st.due.includes(k) && (st.ok[k] || okToday(s, r.theme))) { st.due.push(k); st.bonus.push(k); } }));
+  saveDay(st);
+  const row = (s, t) => { const k = tk(s.key, t), bonus = st.bonus.includes(k); return { s, theme: t, bonus, read: bonus || !!st.read[k] || !themeCard(s, t), ok: !!st.ok[k] || okToday(s, t) }; };
   const items = st.due.map(k => { const [m, t] = k.split("|"); return SUBJ[m] && row(SUBJ[m], t); }).filter(Boolean);
   // A recurring mistake is worth a look every day: the notion of each active trap joins the list, weakest first,
   // and the traps hang under their notion (one block for « what to revise » instead of two).
-  const traps = activePieges().slice().sort((a, b) => (a.streak || 0) - (b.streak || 0));
+  // Before a listening test, its quizzes ask no grammar: the subject's grammar traps come back after the test.
+  const listenOnly = s => soonTests(s).length > 0 && soonTests(s).every(listenTest);
+  const traps = activePieges().filter(p => !(SUBJ[p.m] && listenOnly(SUBJ[p.m]) && p.t !== "Hörverstehen")).sort((a, b) => (a.streak || 0) - (b.streak || 0));
   traps.forEach(p => { const s = SUBJ[p.m], t = p.t || p.titre; if (!items.some(d => d.s === s && d.theme === t)) items.push(Object.assign(row(s, t), { trapOnly: !p.t && p })); });
   items.forEach(d => { d.traps = d.trapOnly ? [] : traps.filter(p => p.m === d.s.key && p.t === d.theme); });
   // « Quiz ✓ » on a notion that carries traps: also each trap answered right today (a dot filled), when a quiz can ask it.
   const trapRight = p => (st.trap || {})[p.id] === true || !trapAsked(SUBJ[p.m], p.id);
   items.forEach(d => { if (d.ok && !d.traps.every(trapRight)) d.ok = false; });
-  return items.filter(d => mine(d.s));
+  return items.filter(d => mine(d.s) || d.bonus && d.ok);
 }
 function markRead(m, themes) { const st = dayState(); themes.forEach(t => { st.read[tk(m, t)] = 1; }); saveDay(st); }
 // Everything ticked but notions still not « acquis »: « Continuer » adds the next ones (weakest first, up to 3 per
