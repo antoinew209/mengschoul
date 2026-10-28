@@ -316,7 +316,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 18h15";
+const BUILD = "28/10 19h03";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -834,8 +834,10 @@ function figSvg(f) {
   });
   (f.right || []).forEach(sg => { const [a, o, b] = two(sg); if (a && o && b) { const u = unit(o, a), v = unit(o, b), m = 10;
     out += `<path class="mark" d="M${r1(o[0] + u[0] * m)} ${r1(o[1] + u[1] * m)}L${r1(o[0] + (u[0] + v[0]) * m)} ${r1(o[1] + (u[1] + v[1]) * m)}L${r1(o[0] + v[0] * m)} ${r1(o[1] + v[1] * m)}"/>`; } });
+  const atVertex = {};  // two angles sharing a vertex get different radii, so they read as two arcs
   (f.angle || []).forEach(an => { const [a, o, b] = two(an.at); if (!a || !o || !b) return;
-    const u = unit(o, a), v = unit(o, b), R = 24;
+    const vx = String(an.at).match(/[A-Z][0-9']*/g)[1], nth = atVertex[vx] = (atVertex[vx] || 0) + 1;
+    const u = unit(o, a), v = unit(o, b), R = 24 + (nth - 1) * 9;
     const cross = u[0] * v[1] - u[1] * v[0];
     out += `<path class="mark" d="M${r1(o[0] + u[0] * R)} ${r1(o[1] + u[1] * R)}A${R} ${R} 0 0 ${cross > 0 ? 1 : 0} ${r1(o[0] + v[0] * R)} ${r1(o[1] + v[1] * R)}"/>`;
     // label on the bisector, far enough to clear both sides when the angle is narrow
