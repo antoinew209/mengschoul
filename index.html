@@ -316,7 +316,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 19h23";
+const BUILD = "28/10 20h30";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -1058,11 +1058,41 @@ function progress() {
   app.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { progTab = b.dataset.tab; progress(); });
   wire();
 }
+// « Ce que tu veux apprendre »: without a page to scan, she writes what she wants to learn (« les médiatrices »);
+// the cloud job makes a fiche and a quiz on it (Code.gs askLearn_, kind « Demande »).
+const LEARN = { m: null, text: "", sent: false };
+const LEARN_MAX = 255;  // what Code.gs keeps
+const learnHint = () => LEARN.m ? "Écris ce que tu veux apprendre" : "Choisis la matière et écris ton sujet";
+const learnLabel = (m, t, d = DATA) => `${(d.subjects.find(s => s.key === m) || { name: m }).name} · « ${t} »`;  // d: also before SUBJ exists
 function scanSubject() {
   setFrame("Scanner", null, true);
+  const asks = DATA.scans.filter(sc => sc.demande).slice(0, 3);
+  const ok = LEARN.m && LEARN.text.trim().length >= 3;
   app.innerHTML = `<section class="card"><h2>1. C'est pour quoi ?</h2>
     <div class="tiles">${DATA.subjects.filter(s => s.scan !== false).map(s => `<button class="tile" data-m="${s.key}" data-go="scan-${s.key}"><b>${esc(s.name)}</b></button>`).join("")}
-    <button class="tile" data-m="agenda" data-go="scan-agenda"><b>Ton agenda</b><span>carnet, devoirs, emploi du temps</span></button></div></section>`;
+    <button class="tile" data-m="agenda" data-go="scan-agenda"><b>Ton agenda</b><span>carnet, devoirs, emploi du temps</span></button></div></section>
+    <section class="card" id="learn"${LEARN.m ? ` data-m="${LEARN.m}"` : ""}><h2>Rien à scanner ? Dis ce que tu veux apprendre</h2>
+      <div class="tiles">${DATA.subjects.map(s => `<button class="tile${LEARN.m === s.key ? " on" : ""}" data-m="${s.key}" data-learn="${s.key}" aria-pressed="${LEARN.m === s.key}"><b>${esc(s.name)}</b></button>`).join("")}</div>
+      <textarea id="ltext" maxlength="${LEARN_MAX}" rows="3" placeholder="Ex. : les médiatrices et la construction au compas">${esc(LEARN.text)}</textarea>
+      <button class="main" id="lsend"${ok ? "" : " disabled"}>${ok ? `Envoyer · ${esc(SUBJ[LEARN.m].name)}` : learnHint()}</button>
+      ${LEARN.sent ? `<p class="sent ok" id="lsent">C'est envoyé : ta fiche et ton quiz arrivent dans un quart d'heure environ.</p>` : ""}
+      ${asks.length ? `<ul class="due">${asks.map(sc => `<li><span class="badge ${sc.status === "à refaire" ? "low" : sc.status === "traité" ? "good" : "mid"}">${esc(sc.status)}</span>
+        <span>${esc(sc.label)}${sc.note ? `<br><span class="small">${esc(sc.note)}</span>` : ""}</span></li>`).join("")}</ul>` : ""}</section>`;
+  const ta = document.getElementById("ltext"), send = document.getElementById("lsend");
+  const fit = () => { LEARN.text = ta.value; const good = LEARN.m && LEARN.text.trim().length >= 3; send.disabled = !good;
+    send.textContent = good ? `Envoyer · ${SUBJ[LEARN.m].name}` : learnHint(); };
+  ta.oninput = fit;
+  app.querySelectorAll("[data-learn]").forEach(b => b.onclick = () => { LEARN.text = ta.value; LEARN.m = b.dataset.learn; LEARN.sent = false; scanSubject(); });
+  send.onclick = () => {
+    const text = ta.value.trim().slice(0, LEARN_MAX);
+    if (!LEARN.m || text.length < 3) return;
+    const id = "l" + Date.now().toString(36);
+    DATA.scans.unshift({ label: learnLabel(LEARN.m, text), demande: true, status: "reçu", note: "En préparation, prêt dans un quart d'heure environ." });
+    store.set("data", JSON.stringify(DATA));
+    queue("askLearn", [id, LEARN.m, text], "learn-" + id);
+    Object.assign(LEARN, { text: "", sent: true });
+    scanSubject();
+  };
   wire();
 }
 function scanStep(rest) {
@@ -1556,6 +1586,7 @@ function applyOutbox(d) {
     const items = (d.agenda && d.agenda.items) || [];
     if (fn === "toggleAgenda") { const it = items.find(i => i.id === args[0]); if (it) it.done = args[1]; }
     else if (fn === "addAgenda") { if (d.agenda && !items.some(i => i.id === args[0])) items.push({ id: args[0], matiere: args[1], date: args[2], type: "controle", title: args[3], by: "elle" }); }
+    else if (fn === "askLearn") { if (d.scans && !d.scans.some(sc => sc.label === learnLabel(args[1], args[2], d))) d.scans.unshift({ label: learnLabel(args[1], args[2], d), demande: true, status: "reçu", note: "En préparation, prêt dans un quart d'heure environ." }); }
     else if (fn === "answerAgenda") { const it = items.find(i => i.id === args[0]); if (it && it.ask) { Object.assign(it, (it.ask.options[args[1]] || {}).set || {}); delete it.ask; } }
     else if (fn === "saveResult") d.subjects.forEach(s => s.quizzes.forEach(q => { if (q.id === args[0].quiz && !q.score) q.score = sumScore(args[0].scores); }));
   });
