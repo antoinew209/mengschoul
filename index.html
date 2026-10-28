@@ -307,7 +307,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 16h50";
+const BUILD = "28/10 17h14";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -455,7 +455,7 @@ function home2() {
   app.innerHTML = `${linkCard()}${askCard()}
     ${tests.map(strip).join("")}
     ${scansWaiting ? `<p class="small" id="scanwait">${scansWaiting > 1 ? `${scansWaiting} scans en attente` : "1 scan en attente"} d'envoi : ${scansWaiting > 1 ? "ils partiront" : "il partira"} dès que tu auras du réseau.</p>` : ""}
-    ${due.length || extra.length ? `<section class="card mission"><div class="dayhead"><h2>${allDone ? "Bravo !" : "Ta prochaine étape"}</h2>${due.length ? `<span class="small" id="dayn">${doneN}/${due.length} faites</span>` : ""}</div>
+    ${due.length || extra.length ? `<section class="card mission"><div class="dayhead"><h2>${allDone ? "Bravo !" : "Ta prochaine étape"}</h2>${due.length ? `<span class="small" id="dayn">${doneN}/${due.length} faites${dayQ() ? ` · ${dayQ()} questions aujourd'hui` : ""}</span>` : ""}</div>
       ${due.length ? `<div class="dayprog" aria-hidden="true"><div style="width:${Math.round(doneN / due.length * 100)}%"></div></div>` : ""}
       ${step && !step.wait && waits.length ? `<p class="small" id="waitnote">${waits.map(w => waitWhat(w.s)).join(" ; ")} dans quelques minutes. En attendant :</p>` : ""}
       ${step && !step.wait ? `<button class="main step" data-go="${step.go}"><span>${esc(step.label)}</span><small>${esc(step.sub)}</small></button>
@@ -518,7 +518,7 @@ function home() {
       ${edtLine(tomorrow) ? `<p class="small">Demain (${dayName(tomorrow)}) :</p>${edtLine(tomorrow)}` : ""}</section>` : ""}
     ${scansWaiting ? `<p class="small" id="scanwait">${scansWaiting > 1 ? `${scansWaiting} scans en attente` : "1 scan en attente"} d'envoi : ${scansWaiting > 1 ? "ils partiront" : "il partira"} dès que tu auras du réseau.</p>` : ""}
     ${confond.length ? `<section class="list">${confond.map(f => ficheRow(f, f.subject, false, true)).join("")}</section>` : ""}
-    ${due.length ? `<section class="card"><div class="dayhead"><h2>À réviser aujourd'hui</h2><span class="small" id="dayn">${doneN}/${due.length} faites</span></div>
+    ${due.length ? `<section class="card"><div class="dayhead"><h2>À réviser aujourd'hui</h2><span class="small" id="dayn">${doneN}/${due.length} faites${dayQ() ? ` · ${dayQ()} questions aujourd'hui` : ""}</span></div>
       <div class="dayprog" aria-hidden="true"><div style="width:${Math.round(doneN / due.length * 100)}%"></div></div>
       ${hero ? `<p class="small start">Commence par :</p>${quizButton(hero, multi)}` : `<p class="small">Tes prochains quiz arrivent dans quelques minutes.</p>`}
       ${order.map(sub => { const { all, shown } = dueShown(due, sub), open = isOpen(sub), q = nextQuiz(sub), ok = all.filter(d => d.read && d.ok).length;
@@ -603,6 +603,8 @@ let allQuiz = false;
 // traps ahead (weakest trap first), ticked ones last. The others unfold per subject; the choice outlives re-renders.
 const openDue = new Set();
 // The « how it works » line shows on her first 3 days only.
+// Questions she answered today, all subjects (the server's daily totals: the same on every device).
+const dayQ = () => DATA.subjects.reduce((n, s) => n + s.review.reduce((m, r) => m + (r.today ? r.today[1] : 0), 0), 0);
 function helpDay() {
   let d = []; try { d = JSON.parse(store.get("help-days") || "[]"); } catch (e) {}
   if (!d.includes(TODAY) && d.length < 3) { d.push(TODAY); store.set("help-days", JSON.stringify(d)); }
@@ -651,11 +653,18 @@ const saveDay = st => store.set(dayKey, JSON.stringify(st));
 function todayDue(mine) {
   const st = dayState();
   // A test within 3 days: every notion of that subject not yet « acquis » joins the list, due date or not.
-  const test = s => agItems().some(it => it.matiere === s.key && testDays(it) >= 0 && testDays(it) <= 3);
-  DATA.subjects.forEach(s => s.review.forEach(r => { const k = tk(s.key, r.theme); if (r.status !== "acquis" && (test(s) || r.next && r.next <= TODAY) && !st.due.includes(k)) st.due.push(k); }));
+  const soonTests = s => agItems().filter(it => it.matiere === s.key && testDays(it) >= 0 && testDays(it) <= 3);
+  // A test within 3 days brings its notions into the day's list; a listening test (« écoute », Hören) only the
+  // listening one, since its quizzes do not ask grammar.
+  const LISTEN_RE = /écoute|compréhension orale|hören|hörverstehen/i;
+  const listenTest = it => LISTEN_RE.test((it.title || "") + " " + (it.details || ""));
+  const test = (s, theme) => soonTests(s).some(it => !listenTest(it) || theme === "Hörverstehen");
+  DATA.subjects.forEach(s => s.review.forEach(r => { const k = tk(s.key, r.theme); if (r.status !== "acquis" && (test(s, r.theme) || r.next && r.next <= TODAY) && !st.due.includes(k)) st.due.push(k); }));
   saveDay(st);
   // « Quiz ✓ » also comes from today's results on the server (r.today = [ok, n]): the same on every device.
-  const okToday = (s, t) => { const r = s.review.find(x => x.theme === t); return !!(r && r.today && r.today[1] && r.today[0] / r.today[1] >= .8); };
+  // « Quiz ✓ » when one quiz of the day passed the notion at 80 % (r.best, best quiz on the server: same on every device),
+  // or the day's total did.
+  const okToday = (s, t) => { const r = s.review.find(x => x.theme === t); return !!(r && (r.best >= .8 || r.today && r.today[1] && r.today[0] / r.today[1] >= .8)); };
   const row = (s, t) => { const k = tk(s.key, t); return { s, theme: t, read: !!st.read[k] || !themeCard(s, t), ok: !!st.ok[k] || okToday(s, t) }; };
   const items = st.due.map(k => { const [m, t] = k.split("|"); return SUBJ[m] && row(SUBJ[m], t); }).filter(Boolean);
   // A recurring mistake is worth a look every day: the notion of each active trap joins the list, weakest first,
