@@ -307,7 +307,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 17h14";
+const BUILD = "28/10 17h25";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -319,10 +319,16 @@ function index(d) {
   DATA = applyOutbox(d);  // ticks and results still waiting to be sent show as done
   SUBJ = Object.fromEntries(DATA.subjects.map(s => [s.key, s]));
   QUIZ = {}; FICHE = {};
-  DATA.subjects.forEach(s => { s.quizzes.forEach(q => QUIZ[q.id] = { ...q, subject: s }); s.fiches.forEach(f => FICHE[f.id] = { ...f, subject: s }); });
+  DATA.subjects.forEach(s => { s.quizzes.forEach(q => QUIZ[q.id] = { ...unpack(q), subject: s }); s.fiches.forEach(f => FICHE[f.id] = { ...f, subject: s }); });
 }
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 
+// A listening text comes once per quiz (q.audios, each question holds its index): put it back in each question.
+// Old quizzes already done come without their questions' text (q.light): only notions, traps and count.
+function unpack(q) {
+  if (q.audios) q.questions.forEach(x => { if (typeof x.audio === "number") x.audio = q.audios[x.audio]; });
+  return q;
+}
 function badge(q) {
   if (!q.score) return `<span class="badge">À faire</span>`;
   const r = q.score[0] / q.score[1];
@@ -1168,6 +1174,13 @@ function quizIntro(quiz) {
   count.textContent = quiz.questions.length + " questions"; fitTitle();
   const total = quiz.questions.length, best = quiz.score || quiz.express ? null : bestPct(quiz.subject, quiz.id);
   const traps = new Set(quiz.questions.map(q => q.p).filter(id => activePieges().some(p => p.id === id))).size;
+  if (quiz.light) {  // an old quiz: only the last ones can be redone, the new quizzes take its notions again
+    app.innerHTML = `<section class="card" id="archived">
+      <ul class="muted" style="margin:0;padding-left:20px">${themes.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
+      ${quiz.score ? `<p class="rec">Ton score : <b>${quiz.score.join("/")}</b>.</p>` : ""}
+      <p class="small">Ce quiz est rangé : tu peux refaire tes 3 derniers quiz de ${esc(quiz.subject.name)}. Tes nouveaux quiz reprennent ces notions.</p></section>`;
+    return;
+  }
   app.innerHTML = `<section class="card">
     <p style="margin:0">${esc(quiz.intro || "")}</p>
     <ul class="muted" style="margin:0;padding-left:20px">${themes.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
