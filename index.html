@@ -307,7 +307,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 12h32";
+const BUILD = "28/10 12h47";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -1588,7 +1588,7 @@ function airplaneBadge() {
   if (!("serviceWorker" in navigator)) return;
   navigator.serviceWorker.ready.then(() => {
     if (!store.get("data")) return;
-    const el = document.getElementById("avion") || document.body.appendChild(Object.assign(document.createElement("p"), { id: "avion" }));
+    const el = document.getElementById("avion") || (document.getElementById("root") || document.body).appendChild(Object.assign(document.createElement("p"), { id: "avion" }));  // inside the page, above the tab bar
     el.textContent = "✓ Prêt pour le mode avion · version " + BUILD;
   });
 }
