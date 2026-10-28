@@ -307,7 +307,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 12h47";
+const BUILD = "28/10 16h14";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -1178,10 +1178,22 @@ function variant(q, useAlt) {
 const canSpeak = () => "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 // iPhone: the silent switch mutes web speech unless the page asks for the « playback » audio session (Safari 17+);
 // speaking right after cancel() can be dropped, so a running reading is stopped first, then the new one starts.
+// The best German voice of the device: natural/online voices first (Edge « Katja / Conrad Online (Natural) », Chrome
+// « Google Deutsch », iPhone « Anna » enhanced), de-DE before de-AT/CH. A computer may have none: then she is told,
+// instead of hearing the text with a French or English accent. Voices load late on computers (voiceschanged).
+function germanVoice() {
+  const score = v => (/natural|neural|online|premium|enhanced|erweitert/i.test(v.name) ? 4 : 0) + (/google/i.test(v.name) ? 3 : 0) + (/^de[-_]DE/i.test(v.lang) ? 1 : 0);
+  return speechSynthesis.getVoices().filter(v => /^de(-|_|$)/i.test(v.lang)).sort((a, b) => score(b) - score(a))[0] || null;
+}
+function voiceHint() {
+  const n = document.getElementById("nogerman");
+  if (n && canSpeak()) n.hidden = !speechSynthesis.getVoices().length || !!germanVoice();
+}
+if (canSpeak() && speechSynthesis.addEventListener) speechSynthesis.addEventListener("voiceschanged", voiceHint);
 function speak(text, rate, onStart) {
   if (!canSpeak()) return;
   try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
-  const s = speechSynthesis, u = new SpeechSynthesisUtterance(text), v = s.getVoices().find(x => /^de(-|_|$)/i.test(x.lang));
+  const s = speechSynthesis, u = new SpeechSynthesisUtterance(text), v = germanVoice();
   u.lang = "de-DE"; if (v) u.voice = v; u.rate = rate;
   let started = false;
   u.onstart = () => { started = true; const n = document.getElementById("nosound"); if (n) n.hidden = true; if (onStart) onStart(); };
@@ -1213,7 +1225,8 @@ function show() {
     <section class="card">
     <span class="chip">${Z.retry ? "2e chance · " : ""}${esc(q.t)}</span>
     ${q.audio ? canSpeak() ? `<div class="audio"><button class="sec" id="play">▶ Vitesse normale</button><button class="sec" id="slow">▶ Plus lentement</button></div>
-      <p class="hint" id="nosound" hidden>Tu n'entends rien ? Enlève le mode silencieux (le petit bouton sur le côté du téléphone), monte le son, puis appuie encore sur ▶.</p>`
+      <p class="hint" id="nosound" hidden>Tu n'entends rien ? Enlève le mode silencieux (le petit bouton sur le côté du téléphone), monte le son, puis appuie encore sur ▶.</p>
+      <p class="hint" id="nogerman" hidden>Ce navigateur n'a pas de voix allemande : le texte serait lu avec un mauvais accent. Sur ordinateur, ouvre le portail avec Microsoft Edge ou Google Chrome, ou bien fais l'écoute sur ton téléphone.</p>`
       : `<p class="hint">Ton téléphone ne peut pas lire à voix haute : lis le texte.</p><p class="heard">${esc(q.audio)}</p>` : ""}
     <p class="q">${q.html ? q.q : esc(q.q).replaceAll("___", "<b>___</b>")}</p>
     ${q.h ? `<p class="hint">(${esc(q.h)})</p>` : ""}
@@ -1241,6 +1254,7 @@ function show() {
   }
   act.onclick = () => Z.checked ? next() : check();
   if (q.audio && canSpeak()) {
+    voiceHint();
     document.getElementById("play").onclick = () => speak(q.audio, 1);
     document.getElementById("slow").onclick = () => speak(q.audio, .7);
   }
@@ -1297,7 +1311,8 @@ function showGroup(g) {
     <span class="chip">${esc(g[0].t)} · ${g.length} questions</span>
     ${canSpeak() ? `<p class="small" id="listens">Lis d'abord les ${g.length} questions, puis écoute : tu as ${LISTENS} écoutes, comme au contrôle.</p>
       <div class="audio"><button class="sec" id="play">▶ Vitesse normale</button><button class="sec" id="slow">▶ Plus lentement</button></div>
-      <p class="hint" id="nosound" hidden>Tu n'entends rien ? Enlève le mode silencieux (le petit bouton sur le côté du téléphone), monte le son, puis appuie encore sur ▶.</p>`
+      <p class="hint" id="nosound" hidden>Tu n'entends rien ? Enlève le mode silencieux (le petit bouton sur le côté du téléphone), monte le son, puis appuie encore sur ▶.</p>
+      <p class="hint" id="nogerman" hidden>Ce navigateur n'a pas de voix allemande : le texte serait lu avec un mauvais accent. Sur ordinateur, ouvre le portail avec Microsoft Edge ou Google Chrome, ou bien fais l'écoute sur ton téléphone.</p>`
       : `<p class="hint">Ton téléphone ne peut pas lire à voix haute : lis le texte.</p><p class="heard">${esc(g[0].audio)}</p>`}
     ${g.map(block).join("")}
     ${keys.length && g.some(q => q.type !== "qcm") ? `<div class="keys">${keys.map(c => `<button type="button" data-c="${c}">${c}</button>`).join("")}</div>` : ""}
@@ -1331,6 +1346,7 @@ function showGroup(g) {
     document.getElementById("play").onclick = () => play(1);
     document.getElementById("slow").onclick = () => play(.7);
     Z.left = left;
+    voiceHint();
   }
   act.onclick = () => Z.checked ? next() : checkGroup(g);
 }
