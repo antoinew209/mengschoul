@@ -307,7 +307,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 16h38";
+const BUILD = "28/10 16h50";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -409,11 +409,15 @@ function home2() {
   const isExam = s => exam && s.key === exam.matiere;
   const order = [...new Set(due.map(d => d.s))].sort((a, b) => isExam(b) - isExam(a) || urg(a) - urg(b));
   // Subjects with a quiz to do but nothing to revise today get a folded card too (no more « Autres quiz »).
-  const extra = DATA.subjects.filter(s => mine(s) && !order.includes(s) && nextQuiz(s));
+  // On a test eve the test subject is alone on home; while its next quiz is being written, the other subjects come
+  // back so she always has something to do (nearest test first).
+  const examWait = exam && !nextQuiz(SUBJ[exam.matiere]) && !lateQuiz(SUBJ[exam.matiere]);
+  const extra = DATA.subjects.filter(s => (mine(s) || examWait) && !order.includes(s) && nextQuiz(s)).sort((a, b) => urg(a) - urg(b));
   const doneN = due.filter(d => d.read && d.ok).length;
   // The next step: in the first subject not finished, the first fiche not read yet, else its quiz.
   const stepOf = s => {
     const all = dueShown(due, s).all, q = nextQuiz(s) || lateQuiz(s);
+    if (!all.length) return q ? { s, go: "q-" + q.id, label: `${nextQuiz(s) ? "Fais" : "Refais"} le quiz n°${q.num} · ${s.name}`, sub: `${q.questions.length} questions · environ ${Math.max(5, Math.round(q.questions.length / 2))} minutes` } : null;
     if (all.every(d => d.read && d.ok)) return null;
     const unread = all.find(d => !d.read && !d.trapOnly);
     if (unread) return { s, go: themeGo(s, unread.theme), label: `Relis la fiche « ${unread.theme} »`,
@@ -421,7 +425,12 @@ function home2() {
     if (q) return { s, go: "q-" + q.id, label: `${nextQuiz(s) ? "Fais" : "Refais"} le quiz n°${q.num} · ${s.name}`, sub: `${q.questions.length} questions · environ ${Math.max(5, Math.round(q.questions.length / 2))} minutes` };
     return { s, wait: true };
   };
-  const step = order.map(stepOf).find(Boolean) || null;
+  // The day's subjects first; another subject's quiz only while a subject of the day waits for its next quiz.
+  const own = order.map(stepOf).filter(Boolean);
+  const step = own.find(x => !x.wait) || (own.length ? extra.map(stepOf).filter(Boolean).find(x => !x.wait) || own[0] : null);
+  const waits = own.filter(x => x.wait && x !== step);
+  const deName = s => { const n = /^(Allemand|Français|Mathématiques|Sciences|Arts plastiques)$/.test(s.name) ? s.name.toLowerCase() : s.name; return (/^[aeiouhéâ]/i.test(n) ? "d'" : "de ") + n; };
+  const waitWhat = s => { const q = lastDone(s); return `${q && isListening(QUIZ[q.id]) ? "Ta nouvelle écoute" : "Ton prochain quiz"} ${deName(s)} arrive`; };
   const tests = agItems().filter(it => it.type === "controle" && testDays(it) >= 0 && (testDays(it) <= 7 || testDays(it) === SOMEDAY)).slice(0, 2);
   const devoirs = agItems().filter(it => it.type === "devoir" && !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7);
   const redo = DATA.scans.filter(sc => sc.status === "à refaire");
@@ -448,9 +457,10 @@ function home2() {
     ${scansWaiting ? `<p class="small" id="scanwait">${scansWaiting > 1 ? `${scansWaiting} scans en attente` : "1 scan en attente"} d'envoi : ${scansWaiting > 1 ? "ils partiront" : "il partira"} dès que tu auras du réseau.</p>` : ""}
     ${due.length || extra.length ? `<section class="card mission"><div class="dayhead"><h2>${allDone ? "Bravo !" : "Ta prochaine étape"}</h2>${due.length ? `<span class="small" id="dayn">${doneN}/${due.length} faites</span>` : ""}</div>
       ${due.length ? `<div class="dayprog" aria-hidden="true"><div style="width:${Math.round(doneN / due.length * 100)}%"></div></div>` : ""}
+      ${step && !step.wait && waits.length ? `<p class="small" id="waitnote">${waits.map(w => waitWhat(w.s)).join(" ; ")} dans quelques minutes. En attendant :</p>` : ""}
       ${step && !step.wait ? `<button class="main step" data-go="${step.go}"><span>${esc(step.label)}</span><small>${esc(step.sub)}</small></button>
         ${step.quiz ? `<button class="link" data-go="q-${step.quiz.id}">ou fais tout de suite le quiz n°${esc(step.quiz.num)} ›</button>` : ""}`
-      : step ? `<p class="small">Ton prochain quiz de ${esc(step.s.name)} arrive dans quelques minutes.</p>`
+      : step ? `<p class="small" id="waitnote">${waitWhat(step.s)} dans quelques minutes.</p>`
       : allDone && more.length ? `<p class="small">Ta liste du jour est faite. Continue avec les notions que tu ne maîtrises pas encore.</p><button class="main" id="moredue">Continuer : ${more.length} notion${more.length > 1 ? "s" : ""} de plus</button>`
       : trapsLeft ? `<p class="small">Il te reste des pièges à fermer : 3 bonnes réponses de suite, dans tes quiz.</p>`
       : due.length ? `<p class="sent ok">Tout est révisé pour aujourd'hui ✓</p>${extra.length ? `<p class="small">D'autres quiz t'attendent plus bas, si tu veux.</p>` : ""}`
@@ -718,8 +728,10 @@ const testAhead = s => agItems().some(it => it.matiere === s.key && testDays(it)
 // The cloud job writes her next quiz a few minutes after a result. If it has not come 20 minutes later (job down,
 // usage limit reached), she redoes her latest quiz instead of waiting with nothing to do.
 const WAIT_MS = 20 * 60e3;
-const lateQuiz = s => Date.now() - +(store.get("doneAt-" + s.key) || 0) < WAIT_MS ? null
-  : s.quizzes.filter(q => QUIZ[q.id].score).sort((a, b) => (parseInt(b.num, 10) || 0) - (parseInt(a.num, 10) || 0))[0] || null;
+// A listening quiz is not redone (same texts, she knows the answers): she gets something else while the next one comes.
+const isListening = q => q.questions.filter(x => x.audio).length * 2 > q.questions.length;
+const lastDone = s => s.quizzes.filter(q => QUIZ[q.id].score).sort((a, b) => (parseInt(b.num, 10) || 0) - (parseInt(a.num, 10) || 0))[0] || null;
+const lateQuiz = s => { if (Date.now() - +(store.get("doneAt-" + s.key) || 0) < WAIT_MS) return null; const q = lastDone(s); return q && !isListening(QUIZ[q.id]) ? q : null; };
 const nextQuiz = s => s.quizzes.filter(q => !QUIZ[q.id].score && (q.title !== "Révisions avant contrôle" || testAhead(s)))
   .sort((a, b) => (parseInt(b.num, 10) || 0) - (parseInt(a.num, 10) || 0))[0] || null;
 function subjectView(s) {
