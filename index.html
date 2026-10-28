@@ -95,6 +95,15 @@ h2 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0; 
 .due.today li.sub { padding-left: 20px; font-size: 14px; margin-top: -5px; }
 .card h3.grp { font-family: var(--display); font-size: 16px; margin: 4px 0 -2px; color: var(--accent); }
 [hidden] { display: none !important; }
+.fig { display: block; margin: 6px auto; max-width: 100%; height: auto; overflow: hidden; }
+.fig line, .fig path, .fig circle { fill: none; stroke: var(--fg); stroke-width: 1.6; stroke-linecap: round; }
+.fig .dash { stroke-dasharray: 5 4; }
+.fig .thin { stroke: var(--muted); stroke-width: 1.2; }
+.fig .mark { stroke: var(--accent); stroke-width: 1.8; }
+.fig circle.pt { fill: var(--fg); stroke: none; }
+.fig text { font-size: 14px; text-anchor: middle; fill: var(--fg); }
+.fig text.name { font-weight: 700; }
+.fig text.lab { fill: var(--accent); font-weight: 600; font-size: 13px; }
 .spark { display: flex; align-items: flex-end; gap: 2px; height: 28px; flex: none; }
 .spark i { width: 5px; border-radius: 2px; background: var(--accent); }
 .spark i.ok { background: var(--ok); }
@@ -307,7 +316,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "28/10 18h02";
+const BUILD = "28/10 18h15";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -787,6 +796,69 @@ function subjectView(s) {
   wire();
 }
 
+// A geometry figure, drawn to scale from data (fiche item ["fig", {…}]), so a 50° angle looks like 50°:
+//   pts   { A: [x, y], … }  coordinates (y up, any unit)      seg   ["AB", …] segments      dash  ["AB", …] dashed
+//   line  ["AB", …] whole lines through 2 points               ray   ["AB", …] half-line from A through B
+//   angle [{ at: "BAC", label: "50°" }]  arc at A between B and C ("?" for the one to find)
+//   right ["ABC", …] right-angle mark at B                     eq    [["AI", "IB"], …] same-length ticks (1 tick, 2…)
+//   len   [{ s: "AB", label: "6 cm" }]                         arc   [{ c: "A", r: 4, from: 20, to: 70 }] compass arc (degrees)
+//   circle [{ c: "O", r: 3 }]       hide ["X"] points without dot or name (helpers for lines)
+function figSvg(f) {
+  const P = f && f.pts || {}, ids = Object.keys(P).filter(k => Array.isArray(P[k]) && P[k].length === 2 && isFinite(P[k][0]) && isFinite(P[k][1]));
+  if (!ids.length) return "";
+  const xs = ids.map(k => +P[k][0]), ys = ids.map(k => +P[k][1]);
+  [...(f.circle || []), ...(f.arc || [])].forEach(c => { const o = P[c.c]; if (o && c.r > 0) { xs.push(o[0] - c.r, o[0] + c.r); ys.push(o[1] - c.r, o[1] + c.r); } });
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const PAD = 26, W = 300, HMAX = 220, k = Math.min((W - 2 * PAD) / (x1 - x0 || 1), (HMAX - 2 * PAD) / (y1 - y0 || 1));
+  const w = Math.round((x1 - x0) * k + 2 * PAD), h = Math.round((y1 - y0) * k + 2 * PAD);
+  const X = p => PAD + (p[0] - x0) * k, Y = p => PAD + (y1 - p[1]) * k, S = n => P[n] && [X(P[n]), Y(P[n])];
+  const cx = ids.reduce((a, n) => a + S(n)[0], 0) / ids.length, cy = ids.reduce((a, n) => a + S(n)[1], 0) / ids.length;
+  const r1 = v => Math.round(v * 10) / 10, unit = (a, b) => { const d = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / d, (b[1] - a[1]) / d]; };
+  const two = sg => (String(sg).match(/[A-Z][0-9']*/g) || []).map(S);
+  const drawn = [];  // segments on the drawing: names go where they cross none
+  const ln = (a, b, cls = "") => { drawn.push([a, b]); return `<line x1="${r1(a[0])}" y1="${r1(a[1])}" x2="${r1(b[0])}" y2="${r1(b[1])}"${cls ? ` class="${cls}"` : ""}/>`; };
+  const txt = (x, y, t, cls = "") => `<text x="${r1(x)}" y="${r1(y)}"${cls ? ` class="${cls}"` : ""}>${esc(String(t))}</text>`;
+  let out = "";
+  const far = 2 * (w + h);
+  (f.line || []).forEach(sg => { const [a, b] = two(sg); if (a && b) { const u = unit(a, b); out += ln([a[0] - u[0] * far, a[1] - u[1] * far], [b[0] + u[0] * far, b[1] + u[1] * far]); } });
+  (f.ray || []).forEach(sg => { const [a, b] = two(sg); if (a && b) { const u = unit(a, b); out += ln(a, [b[0] + u[0] * far, b[1] + u[1] * far]); } });
+  (f.seg || []).forEach(sg => { const [a, b] = two(sg); if (a && b) out += ln(a, b); });
+  (f.dash || []).forEach(sg => { const [a, b] = two(sg); if (a && b) out += ln(a, b, "dash"); });
+  (f.circle || []).forEach(c => { const o = S(c.c); if (o && c.r > 0) out += `<circle cx="${r1(o[0])}" cy="${r1(o[1])}" r="${r1(c.r * k)}" class="thin"/>`; });
+  (f.arc || []).forEach(c => {
+    const o = S(c.c); if (!o || !(c.r > 0)) return;
+    const R = c.r * k, a = (+c.from || 0) * Math.PI / 180, b = (+c.to || 0) * Math.PI / 180, big = Math.abs(b - a) > Math.PI ? 1 : 0;
+    const at = t => [o[0] + R * Math.cos(t), o[1] - R * Math.sin(t)];
+    for (let i = 0; i < 6; i++) drawn.push([at(a + (b - a) * i / 6), at(a + (b - a) * (i + 1) / 6)]);  // names keep off the arc too
+    out += `<path class="thin" d="M${r1(o[0] + R * Math.cos(a))} ${r1(o[1] - R * Math.sin(a))}A${r1(R)} ${r1(R)} 0 ${big} ${b > a ? 0 : 1} ${r1(o[0] + R * Math.cos(b))} ${r1(o[1] - R * Math.sin(b))}"/>`;
+  });
+  (f.right || []).forEach(sg => { const [a, o, b] = two(sg); if (a && o && b) { const u = unit(o, a), v = unit(o, b), m = 10;
+    out += `<path class="mark" d="M${r1(o[0] + u[0] * m)} ${r1(o[1] + u[1] * m)}L${r1(o[0] + (u[0] + v[0]) * m)} ${r1(o[1] + (u[1] + v[1]) * m)}L${r1(o[0] + v[0] * m)} ${r1(o[1] + v[1] * m)}"/>`; } });
+  (f.angle || []).forEach(an => { const [a, o, b] = two(an.at); if (!a || !o || !b) return;
+    const u = unit(o, a), v = unit(o, b), R = 24;
+    const cross = u[0] * v[1] - u[1] * v[0];
+    out += `<path class="mark" d="M${r1(o[0] + u[0] * R)} ${r1(o[1] + u[1] * R)}A${R} ${R} 0 0 ${cross > 0 ? 1 : 0} ${r1(o[0] + v[0] * R)} ${r1(o[1] + v[1] * R)}"/>`;
+    // label on the bisector, far enough to clear both sides when the angle is narrow
+    if (an.label) { const m = unit([0, 0], [u[0] + v[0], u[1] + v[1]]), half = Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1]))) / 2, d = Math.max(R + 14, 12 / Math.max(Math.sin(half), .1)); out += txt(o[0] + m[0] * d, o[1] + m[1] * d + 4, an.label, "lab"); } });
+  (f.eq || []).forEach((grp, gi) => [].concat(grp).forEach(sg => { const [a, b] = two(sg); if (!a || !b) return;
+    const u = unit(a, b), n = [-u[1], u[0]], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+    for (let t = 0; t <= gi; t++) { const off = (t - gi / 2) * 4; out += ln([mx + u[0] * off - n[0] * 5, my + u[1] * off - n[1] * 5], [mx + u[0] * off + n[0] * 5, my + u[1] * off + n[1] * 5], "mark"); } }));
+  (f.len || []).forEach(l => { const [a, b] = two(l.s); if (!a || !b || !l.label) return;
+    const u = unit(a, b), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; let n = [-u[1], u[0]];
+    if ((mx + n[0] - cx) ** 2 + (my + n[1] - cy) ** 2 < (mx - cx) ** 2 + (my - cy) ** 2) n = [-n[0], -n[1]];  // outside the figure
+    out += txt(mx + n[0] * 13, my + n[1] * 13 + 4, l.label, "lab"); });
+  const hide = new Set(f.hide || []);
+  // A point's name: of 8 places around it, the one farthest from every line (outside the figure when equal).
+  const segDist = (p, [a, b]) => { const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L));
+    return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); };
+  ids.filter(n => !hide.has(n)).forEach(n => { const [x, y] = S(n), out0 = unit([cx, cy], [x, y]);
+    let best = null;
+    for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, d = [Math.cos(a), Math.sin(a)], q = [x + d[0] * 14, y + d[1] * 14];
+      const score = Math.min(9, ...drawn.map(sg => segDist(q, sg))) + (d[0] * out0[0] + d[1] * out0[1]);
+      if (!best || score > best.score) best = { score, q }; }
+    out += `<circle cx="${r1(x)}" cy="${r1(y)}" r="2.6" class="pt"/>` + txt(best.q[0], best.q[1] + 5, n, "name"); });
+  return `<svg class="fig" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="Schéma">${out}</svg>`;
+}
 function cardHtml(c, k, n) {
   let body = "", ul = null;
   const flush = () => { if (ul) { body += `<ul>${ul}</ul>`; ul = null; } };
@@ -797,6 +869,7 @@ function cardHtml(c, k, n) {
     else if (it[0] === "p") body += `<p>${rich(it[1])}</p>`;
     else if (it[0] === "t") body += `<div class="tscroll"><table>${it[1].map((r, i) => `<tr>${r.map(x => i === 0 ? `<th>${esc(String(x).replace(/\*\*/g, ""))}</th>` : `<td>${rich(x)}</td>`).join("")}</tr>`).join("")}</table></div>`;
     else if (it[0] === "gap") body += `<div style="height:${Math.round(it[1] / 3)}px"></div>`;
+    else if (it[0] === "fig") body += figSvg(it[1]);
   });
   flush();
   return `<article class="fcard"><div class="fhead">${esc(c.title)}<span>${k}/${n}</span></div><div class="fbody">${body}</div></article>`;
