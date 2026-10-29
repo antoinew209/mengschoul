@@ -318,7 +318,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "29/10 14h40";
+const BUILD = "29/10 22h11";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -447,7 +447,7 @@ function home2() {
   const step = own.find(x => !x.wait) || (own.length ? extra.map(stepOf).filter(Boolean).find(x => !x.wait) || own[0] : null);
   const waits = own.filter(x => x.wait && x !== step);
   const deName = s => { const n = /^(Allemand|Français|Mathématiques|Sciences|Arts plastiques)$/.test(s.name) ? s.name.toLowerCase() : s.name; return (/^[aeiouhéâ]/i.test(n) ? "d'" : "de ") + n; };
-  const waitWhat = s => { const q = lastDone(s); return `${q && isListening(QUIZ[q.id]) ? "Ta nouvelle écoute" : "Ton prochain quiz"} ${deName(s)} arrive`; };
+  const waitWhat = s => { const q = lastDone(s); return `${q && isListening(QUIZ[q.id]) && testAhead(s) ? "Ta nouvelle écoute" : "Ton prochain quiz"} ${deName(s)} arrive`; };
   const tests = agItems().filter(it => it.type === "controle" && testDays(it) >= 0 && (testDays(it) <= 7 || testDays(it) === SOMEDAY)).slice(0, 2);
   const devoirs = agItems().filter(it => it.type === "devoir" && !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7);
   const redo = DATA.scans.filter(sc => sc.status === "à refaire");
@@ -774,7 +774,10 @@ const WAIT_MS = 20 * 60e3;
 // A listening quiz is not redone (same texts, she knows the answers): she gets something else while the next one comes.
 const isListening = q => q.questions.filter(x => x.audio).length * 2 > q.questions.length;
 const lastDone = s => s.quizzes.filter(q => QUIZ[q.id].score).sort((a, b) => (parseInt(b.num, 10) || 0) - (parseInt(a.num, 10) || 0))[0] || null;
-const lateQuiz = s => { if (Date.now() - +(store.get("doneAt-" + s.key) || 0) < WAIT_MS) return null; const q = lastDone(s); return q && !isListening(QUIZ[q.id]) ? q : null; };
+// 29/10 : nor a quiz with listening questions, nor a « Révisions avant contrôle » once its test is behind her
+// (after « passé », quiz n°16, half listening, came back as « Refais le quiz n°16 »).
+const lateQuiz = s => { if (Date.now() - +(store.get("doneAt-" + s.key) || 0) < WAIT_MS) return null; const q = lastDone(s);
+  return q && !QUIZ[q.id].questions.some(x => x.audio) && (q.title !== "Révisions avant contrôle" || testAhead(s)) ? q : null; };
 const nextQuiz = s => s.quizzes.filter(q => !QUIZ[q.id].score && (q.title !== "Révisions avant contrôle" || testAhead(s)))
   .sort((a, b) => (parseInt(b.num, 10) || 0) - (parseInt(a.num, 10) || 0))[0] || null;
 function subjectView(s) {
