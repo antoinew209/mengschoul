@@ -318,7 +318,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "29/10 12h29";
+const BUILD = "29/10 14h40";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -1409,6 +1409,7 @@ function show() {
       <p class="hint" id="nosound" hidden>Tu n'entends rien ? Enlève le mode silencieux (le petit bouton sur le côté du téléphone : la cloche barrée en haut de l'écran disparaît), monte le son, puis appuie encore sur ▶.</p>
       <p class="hint" id="nogerman" hidden>Ce navigateur n'a pas de voix allemande : le texte serait lu avec un mauvais accent. Sur ordinateur, ouvre le portail avec Microsoft Edge ou Google Chrome, ou bien fais l'écoute sur ton téléphone.</p>`
       : `<p class="hint">Ton téléphone ne peut pas lire à voix haute : lis le texte.</p><p class="heard">${esc(q.audio)}</p>` : ""}
+    ${q.fig ? figSvg(q.fig) : ""}
     <p class="q">${q.html ? q.q : esc(q.q).replaceAll("___", "<b>___</b>")}</p>
     ${q.h ? `<p class="hint">(${esc(q.h)})</p>` : ""}
     ${body}
