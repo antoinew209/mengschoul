@@ -157,7 +157,7 @@ body.hasnav .wrap { flex: 1 0 auto; width: 100%; box-sizing: border-box; padding
 .fcards { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 12px; margin-inline: -16px; padding-inline: 16px; scrollbar-width: none; }
 .fcards::-webkit-scrollbar { display: none; }
 .fcard { flex: 0 0 100%; scroll-snap-align: center; background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; max-height: calc(100dvh - 150px); overflow-y: auto; }
-.fcard > .fhead { background: var(--accent); color: #fff; padding: 12px 14px; font-family: var(--display); font-weight: 800; font-size: 20px; display: flex; justify-content: space-between; gap: 10px; }
+.fcard > .fhead { background: var(--accent); color: var(--bg); padding: 12px 14px; font-family: var(--display); font-weight: 800; font-size: 20px; display: flex; justify-content: space-between; gap: 10px; }
 .fcard > .fhead span { font-family: var(--body); font-weight: 400; font-size: 14px; opacity: .85; align-self: center; }
 .fbody { padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 8px; }
 .fbody h3 { font-family: var(--display); font-size: 18px; margin: 6px 0 0; color: var(--accent); border-bottom: 2px solid var(--line); padding-bottom: 2px; }
@@ -250,7 +250,7 @@ details > summary { cursor: pointer; font-family: var(--display); font-weight: 6
 .ag .btns .mini { margin-top: 0; }
 .days { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .days .mini { color: var(--bg); }
-.tile.on { background: var(--accent); color: #fff; }
+.tile.on { background: var(--accent); color: var(--bg); }
 #nday { font: inherit; padding: 8px 10px; border-radius: 10px; border: 2px solid var(--line); background: var(--bg); color: var(--fg); }
 #ntitle { font-size: 17px; resize: vertical; }
 button.main:disabled { opacity: .5; cursor: default; }
@@ -258,9 +258,10 @@ button.main:disabled { opacity: .5; cursor: default; }
 .ag.late .meta { color: var(--bad); font-weight: 700; }
 .ag.done b { text-decoration: line-through; color: var(--muted); }
 .chk { width: 30px; height: 30px; border-radius: 8px; border: 2px solid var(--accent); background: transparent; color: transparent; font: inherit; font-weight: 800; cursor: pointer; flex: none; }
-.chk[aria-pressed="true"] { background: var(--accent); color: #fff; }
-.tag { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #fff; background: var(--accent); border-radius: 6px; padding: 4px 6px; flex: none; }
-.mini { font: inherit; font-weight: 700; font-size: 14px; border: 0; border-radius: 999px; padding: 6px 12px; background: var(--accent); color: #fff; cursor: pointer; flex: none; }
+.chk[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
+.tag { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--bg); background: var(--accent); border-radius: 6px; padding: 4px 6px; flex: none; }
+/* 2/11 : text on an accent fill is var(--bg), never white: in dark mode the accents are light (« J'ai la date » illisible). */
+.mini { font: inherit; font-weight: 700; font-size: 14px; border: 0; border-radius: 999px; padding: 6px 12px; background: var(--accent); color: var(--bg); cursor: pointer; flex: none; }
 .edt { display: flex; flex-wrap: wrap; gap: 6px; }
 .ask { display: flex; flex-direction: column; gap: 8px; }
 .ask + .ask { border-top: 1px solid var(--line); padding-top: 12px; }
@@ -319,7 +320,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "02/11 17h20";
+const BUILD = "02/11 17h33";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
