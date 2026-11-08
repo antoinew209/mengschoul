@@ -320,7 +320,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "02/11 17h33";
+const BUILD = "09/11 00h07";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -483,7 +483,7 @@ function home2() {
       ${all.length ? `<ul class="due today nl">${shown.map(d => { const [c, ic, t] = state(d); return `<li class="lnk n-${c}" data-m="${d.s.key}" role="button" tabindex="0" data-go="${d.trapOnly ? "fp-" + esc(d.trapOnly.id) : themeGo(d.s, d.theme)}"><span class="st" title="${t}">${ic}</span><span class="grow">${esc(d.theme)}</span></li>
         ${d.traps.map(p => `<li class="lnk sub" data-m="${p.m}" role="button" tabindex="0" data-go="fp-${esc(p.id)}"><span class="grow">↳ ${esc(p.titre)}</span>${pips(p)}</li>`).join("")}`; }).join("")}</ul>
       ${all.length > shown.length ? `<button class="more" data-moredue="${s.key}">${all.length - shown.length > 1 ? `Voir les ${all.length - shown.length} autres notions` : "Voir l'autre notion"}</button>` : ""}` : ""}
-      ${step && step.s === s ? "" : q ? `<button class="sec" data-go="q-${q.id}">Faire le quiz n°${esc(q.num)}</button>` : late ? `<button class="sec" data-go="q-${late.id}">Refaire le quiz n°${esc(late.num)}</button>` : ""}</section>`;
+      ${q ? `<button class="sec" data-go="q-${q.id}">Faire le quiz n°${esc(q.num)}</button>` : late ? `<button class="sec" data-go="q-${late.id}">Refaire le quiz n°${esc(late.num)}</button>` : ""}</section>`;
   };
   app.innerHTML = `${linkCard()}${askCard()}
     ${tests.map(stripOf).join("")}
