@@ -43,7 +43,7 @@
 [data-m="arts"] { --accent: var(--ar); }
 [data-m="ia"] { --accent: var(--ia); }
 [data-m="geschichte"] { --accent: var(--ge); }
-[data-m="geographie"] { --accent: var(--gg); }
+[data-m="geografie"] { --accent: var(--gg); }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 17px; line-height: 1.45; }
@@ -321,7 +321,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "14/11 13h19";
+const BUILD = "14/11 13h21";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -430,7 +430,7 @@ function home2() {
   if (updateReady) { updateReady = false; try { sessionStorage.setItem("upd-at", Date.now()); } catch (e) {} return location.reload(); }
   setFrame("Aujourd'hui", null, false);
   const exam = agItems().find(it => SUBJ[it.matiere] && testDays(it) >= 0 && testDays(it) <= 1);
-  const ALWAYS = ["allemand"];
+  const ALWAYS = ["allemand", "francais", "mathematiques"];
   const mine = s => !exam || s.key === exam.matiere || ALWAYS.includes(s.key);
   const due = todayDue(mine), allDone = due.every(d => d.read && d.ok);
   const more = allDone ? moreDue(mine) : [];
@@ -459,7 +459,7 @@ function home2() {
   const own = order.map(stepOf).filter(Boolean);
   const step = own.find(x => !x.wait) || (own.length ? extra.map(stepOf).filter(Boolean).find(x => !x.wait) || own[0] : null);
   const waits = own.filter(x => x.wait && x !== step);
-  const deName = s => { const n = /^(Allemand|Français|Mathématiques|Sciences|Arts plastiques|Géographie)$/.test(s.name) ? s.name.toLowerCase() : s.name; return (/^[aeiouhéâ]/i.test(n) ? "d'" : "de ") + n; };
+  const deName = s => { const n = /^(Allemand|Français|Mathématiques|Sciences|Arts plastiques)$/.test(s.name) ? s.name.toLowerCase() : s.name; return (/^[aeiouhéâ]/i.test(n) ? "d'" : "de ") + n; };
   const waitWhat = s => { const q = lastDone(s), v = vacNext(s); return `${q && isListening(QUIZ[q.id]) && testAhead(s) ? "Ta nouvelle écoute" : "Ton prochain quiz"} ${deName(s)} arrive ${v ? dayName(v) : "dans quelques minutes"}`; };
   const tests = agItems().filter(it => it.type === "controle" && testDays(it) >= 0 && (testDays(it) <= 7 || testDays(it) === SOMEDAY)).slice(0, 2);
   const devoirs = agItems().filter(it => it.type === "devoir" && !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7);
@@ -516,10 +516,10 @@ function home() {
   if (updateReady) { updateReady = false; try { sessionStorage.setItem("upd-at", Date.now()); } catch (e) {} return location.reload(); }
   setFrame("Tes révisions", null, false);
   const tomorrow = new Date(Date.parse(TODAY + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
-  // The day before and the day of a test, home offers that subject first, plus Allemand (always on home);
+  // The day before and the day of a test, home offers that subject first, plus Allemand, Français and Maths (always on home);
   // the rest stays in Tes matières.
   const exam = agItems().find(it => SUBJ[it.matiere] && testDays(it) >= 0 && testDays(it) <= 1);
-  const ALWAYS = ["allemand"];
+  const ALWAYS = ["allemand", "francais", "mathematiques"];
   const mine = s => !exam || s.key === exam.matiere || ALWAYS.includes(s.key);
   const first = d => exam && d.s.key === exam.matiere ? 0 : 1;
   const due = todayDue(mine).sort((x, y) => first(x) - first(y)), left = due.filter(d => !d.ok), allDone = due.every(d => d.read && d.ok);
@@ -537,7 +537,7 @@ function home() {
   const urg = s => Math.min(999, ...agItems().filter(it => it.matiere === s.key).map(testDays).filter(d => d >= 0));
   const order = [...new Set(due.map(d => d.s))].sort((a, b) => (exam && b.key === exam.matiere) - (exam && a.key === exam.matiere) || urg(a) - urg(b));
   const hero = order.find(s => nextQuiz(s) || lateQuiz(s)) || null;
-  const isOpen = s => !multi || s === (hero || order[0]) || ALWAYS.includes(s.key) || openGrp.has(s.key);  // Allemand: always unfolded
+  const isOpen = s => !multi || s === (hero || order[0]) || ALWAYS.includes(s.key) || openGrp.has(s.key);  // Allemand, Français, Maths: always unfolded
   const doneN = due.filter(d => d.read && d.ok).length;
   const todo = DATA.subjects.filter(mine).map(nextQuiz).filter(Boolean);
   const rest = todo.filter(q => !due.some(d => d.s.key === QUIZ[q.id].subject.key));  // the others have their button in « À réviser aujourd'hui »
@@ -644,7 +644,7 @@ function helpDay() {
   if (!d.includes(TODAY) && d.length < 3) { d.push(TODAY); store.set("help-days", JSON.stringify(d)); }
   return d.includes(TODAY);
 }
-// Subjects she unfolded on home (the first one and Allemand are always open), kept on the phone until the next day.
+// Subjects she unfolded on home (the first one and Allemand, Français, Maths are always open), kept on the phone until the next day.
 const openGrp = (() => { try { const o = JSON.parse(store.get("open-grp") || "{}"); return new Set(o.day === TODAY ? o.keys : []); } catch (e) { return new Set(); } })();
 const saveGrp = () => store.set("open-grp", JSON.stringify({ day: TODAY, keys: [...openGrp] }));
 function dueShown(due, sub) {
