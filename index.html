@@ -240,6 +240,8 @@ details > summary { cursor: pointer; font-family: var(--display); font-weight: 6
 .ag { display: flex; align-items: center; gap: 10px; }
 .ag .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .due li.ag { align-items: flex-start; }
+.due li.redo { cursor: pointer; }
+.due li.redo .chev { color: var(--muted); font-size: 22px; }
 .ag small, .ag .meta { color: var(--muted); font-size: 14px; }
 /* Tag and button sit inside the text column, so the details get the full width. */
 .ag .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -321,7 +323,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "14/11 13h34";
+const BUILD = "14/11 13h47";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -391,6 +393,16 @@ function fitTitle() {
   for (let px = 23; h1.scrollWidth > h1.clientWidth && px >= 15; px--) h1.style.fontSize = px + "px";
 }
 addEventListener("resize", fitTitle);
+// « Scan à refaire »: tapping the line opens the scanner on its subject, and on its kind of document when the
+// label says it (« Géographie · Cours, le 14/11 »); a Demande opens the subject's choice of document (14/11).
+function redoGo(sc) {
+  if (/^Agenda · /.test(sc.label)) return "scan-agenda";
+  const s = DATA.subjects.find(x => sc.label.startsWith(x.name + " · "));
+  if (!s || s.scan === false) return "scan";
+  return "scan-" + s.key + (/ · Cours, /.test(sc.label) ? "-cours" : / · Contrôles, /.test(sc.label) ? "-controle" : "");
+}
+const redoLi = sc => `<li class="redo" role="button" tabindex="0" data-go="${redoGo(sc)}"><span class="badge low">${esc(sc.status)}</span>
+  <span class="grow">${esc(sc.label)}${sc.note ? `<br><span class="small">${esc(sc.note)}</span>` : ""}</span><span class="chev" aria-hidden="true">›</span></li>`;
 function wire() { app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go)); }
 
 
@@ -503,7 +515,7 @@ function home2() {
       : `<p class="empty">Rien à faire aujourd'hui. Bravo !</p>`}
     ${order.map(card).join("")}${extra.map(card).join("")}
     ${devoirs.length ? `<section class="card" data-m="agenda"><h2>Devoirs</h2><ul class="due">${devoirs.map(agRow).join("")}</ul></section>` : ""}
-    ${redo.length ? `<section class="card"><h2>Scan à refaire</h2><ul class="due">${redo.map(sc => `<li><span class="badge low">${esc(sc.status)}</span><span>${esc(sc.label)}${sc.note ? `<br><span class="small">${esc(sc.note)}</span>` : ""}</span></li>`).join("")}</ul></section>` : ""}
+    ${redo.length ? `<section class="card"><h2>Scan à refaire</h2><ul class="due">${redo.map(redoLi).join("")}</ul></section>` : ""}
     <p class="small">Mis à jour le ${esc(DATA.updated)}.</p>`;
   wire(); wireAgenda(home);
   app.querySelectorAll("[data-moredue]").forEach(b => b.onclick = () => { openDue.add(b.dataset.moredue); home(); });
@@ -579,9 +591,7 @@ function home() {
       ${!s.fiches.length && !s.quizzes.length && s.scan !== false ? `<button class="tile empty-tile" data-m="${s.key}" data-go="scan-${s.key}"><b>${esc(s.name)}</b><span>Scanne ton premier cours ›</span></button>`
       : `<button class="tile" data-m="${s.key}" data-go="m-${s.key}"><b>${esc(s.name)}</b>
       <span>${((n) => `${n} fiche${n > 1 ? "s" : ""}`)(s.fiches.filter(f => liveCards(f, s).length).length)} · ${s.quizzes.length} quiz</span></button>`}`).join("")}</div></section>
-    ${redo.length ? `<section class="card"><h2>Scan à refaire</h2><ul class="due">${redo.map(s => `
-      <li><span class="badge ${s.status === "à refaire" ? "low" : s.status === "traité" ? "good" : "mid"}">${esc(s.status)}</span>
-      <span>${esc(s.label)}${s.note ? `<br><span class="small">${esc(s.note)}</span>` : ""}</span></li>`).join("")}</ul></section>` : ""}
+    ${redo.length ? `<section class="card"><h2>Scan à refaire</h2><ul class="due">${redo.map(redoLi).join("")}</ul></section>` : ""}
     <div class="tiles"><button class="sec" data-go="agenda">Ton agenda</button><button class="sec" data-go="progres">Tes progrès</button></div>
     <p class="small">Mis à jour le ${esc(DATA.updated)}.</p>`;
   wire(); wireAgenda(home); moreQuizzes(rest);
