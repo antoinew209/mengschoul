@@ -325,7 +325,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "14/11 13h54";
+const BUILD = "14/11 17h08";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -396,15 +396,19 @@ function fitTitle() {
 }
 addEventListener("resize", fitTitle);
 // « Scan à refaire »: tapping the line opens the scanner on its subject, and on its kind of document when the
-// label says it (« Géographie · Cours, le 14/11 »); a Demande opens the subject's choice of document (14/11).
+// label says it (« Géographie · Cours, le 14/11 »); a Demande opens « Apprendre » in its subject (14/11).
 function redoGo(sc) {
   if (/^Agenda · /.test(sc.label)) return "scan-agenda";
   const s = DATA.subjects.find(x => sc.label.startsWith(x.name + " · "));
-  if (!s || s.scan === false) return "scan";
+  if (!s) return "scan";
+  if (sc.demande || / · « /.test(sc.label)) return "scan-" + s.key + "-apprendre";  // a Demande: she writes it again
+  if (s.scan === false) return "scan-" + s.key;
   return "scan-" + s.key + (/ · Cours, /.test(sc.label) ? "-cours" : / · Contrôles, /.test(sc.label) ? "-controle" : "");
 }
 const redoLi = sc => `<li class="redo" role="button" tabindex="0" data-go="${redoGo(sc)}"><span class="badge low">${esc(sc.status)}</span>
   <span class="grow">${esc(sc.label)}${sc.note ? `<br><span class="small">${esc(sc.note)}</span>` : ""}</span><span class="chev" aria-hidden="true">›</span></li>`;
+// A subject after « de »: « de géographie », « d'histoire » (other names stay as written).
+const deName = s => { const n = /^(Allemand|Français|Mathématiques|Sciences|Histoire|Géographie|Musique|Vie et société|Arts plastiques)$/.test(s.name) ? s.name.toLowerCase() : s.name; return (/^[aeiouhéâ]/i.test(n) ? "d'" : "de ") + n; };
 function wire() { app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go)); }
 
 
@@ -473,7 +477,6 @@ function home2() {
   const own = order.map(stepOf).filter(Boolean);
   const step = own.find(x => !x.wait) || (own.length ? extra.map(stepOf).filter(Boolean).find(x => !x.wait) || own[0] : null);
   const waits = own.filter(x => x.wait && x !== step);
-  const deName = s => { const n = /^(Allemand|Français|Mathématiques|Sciences|Histoire|Géographie|Musique|Vie et société|Arts plastiques)$/.test(s.name) ? s.name.toLowerCase() : s.name; return (/^[aeiouhéâ]/i.test(n) ? "d'" : "de ") + n; };
   const waitWhat = s => { const q = lastDone(s), v = vacNext(s); return `${q && isListening(QUIZ[q.id]) && testAhead(s) ? "Ta nouvelle écoute" : "Ton prochain quiz"} ${deName(s)} arrive ${v ? dayName(v) : "dans quelques minutes"}`; };
   const tests = agItems().filter(it => it.type === "controle" && testDays(it) >= 0 && (testDays(it) <= 7 || testDays(it) === SOMEDAY)).slice(0, 2);
   const devoirs = agItems().filter(it => it.type === "devoir" && !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7);
@@ -1143,56 +1146,119 @@ function progress() {
   app.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { progTab = b.dataset.tab; progress(); });
   wire();
 }
-// « Ce que tu veux apprendre »: without a page to scan, she writes what she wants to learn (« les médiatrices »);
-// the cloud job makes a fiche and a quiz on it (Code.gs askLearn_, kind « Demande »).
+// Scanner (14/11, the parent: « un premier écran avec toutes les matières et, une fois la matière choisie, les
+// différents choix : scanner un cours, un contrôle, apprendre une nouvelle notion, préparer un contrôle »).
+// « Apprendre »: without a page to scan, she writes what she wants to learn (« les médiatrices »); the cloud job
+// makes a fiche and a quiz on it (Code.gs askLearn_, kind « Demande »).
 const LEARN = { m: null, text: "", sent: false };
 const LEARN_MAX = 255;  // what Code.gs keeps
-const learnHint = () => LEARN.m ? "Écris ce que tu veux apprendre" : "Choisis la matière et écris ton sujet";
 const learnLabel = (m, t, d = DATA) => `${(d.subjects.find(s => s.key === m) || { name: m }).name} · « ${t} »`;  // d: also before SUBJ exists
+const askBadge = st => st === "à refaire" ? "low" : st === "traité" ? "good" : "mid";
 function scanSubject() {
   setFrame("Scanner", null, true);
-  const asks = DATA.scans.filter(sc => sc.demande).slice(0, 3);
-  const ok = LEARN.m && LEARN.text.trim().length >= 3;
-  app.innerHTML = `<section class="card"><h2>1. C'est pour quoi ?</h2>
-    <div class="tiles">${DATA.subjects.filter(s => s.scan !== false).map(s => `<button class="tile" data-m="${s.key}" data-go="scan-${s.key}"><b>${esc(s.name)}</b></button>`).join("")}
-    <button class="tile" data-m="agenda" data-go="scan-agenda"><b>Ton agenda</b><span>carnet, devoirs, emploi du temps</span></button></div></section>
-    <section class="card" id="learn"${LEARN.m ? ` data-m="${LEARN.m}"` : ""}><h2>Rien à scanner ? Dis ce que tu veux apprendre</h2>
-      <div class="tiles">${DATA.subjects.map(s => `<button class="tile${LEARN.m === s.key ? " on" : ""}" data-m="${s.key}" data-learn="${s.key}" aria-pressed="${LEARN.m === s.key}"><b>${esc(s.name)}</b></button>`).join("")}</div>
-      <textarea id="ltext" maxlength="${LEARN_MAX}" rows="3" placeholder="Ex. : les médiatrices et la construction au compas">${esc(LEARN.text)}</textarea>
-      <button class="main" id="lsend"${ok ? "" : " disabled"}>${ok ? `Envoyer · ${esc(SUBJ[LEARN.m].name)}` : learnHint()}</button>
-      ${LEARN.sent ? `<p class="sent ok" id="lsent">C'est envoyé : ta fiche et ton quiz arrivent dans un quart d'heure environ.</p>` : ""}
-      ${asks.length ? `<ul class="due">${asks.map(sc => `<li><span class="badge ${sc.status === "à refaire" ? "low" : sc.status === "traité" ? "good" : "mid"}">${esc(sc.status)}</span>
-        <span>${esc(sc.label)}${sc.note ? `<br><span class="small">${esc(sc.note)}</span>` : ""}</span></li>`).join("")}</ul>` : ""}</section>`;
-  const ta = document.getElementById("ltext"), send = document.getElementById("lsend");
-  const fit = () => { LEARN.text = ta.value; const good = LEARN.m && LEARN.text.trim().length >= 3; send.disabled = !good;
-    send.textContent = good ? `Envoyer · ${SUBJ[LEARN.m].name}` : learnHint(); };
-  ta.oninput = fit;
-  app.querySelectorAll("[data-learn]").forEach(b => b.onclick = () => { LEARN.text = ta.value; LEARN.m = b.dataset.learn; LEARN.sent = false; scanSubject(); });
-  send.onclick = () => {
-    const text = ta.value.trim().slice(0, LEARN_MAX);
-    if (!LEARN.m || text.length < 3) return;
-    const id = "l" + Date.now().toString(36);
-    DATA.scans.unshift({ label: learnLabel(LEARN.m, text), demande: true, status: "reçu", note: "En préparation, prêt dans un quart d'heure environ." });
-    store.set("data", JSON.stringify(DATA));
-    queue("askLearn", [id, LEARN.m, text], "learn-" + id);
-    Object.assign(LEARN, { text: "", sent: true });
-    scanSubject();
-  };
+  app.innerHTML = `<section class="card"><h2>C'est pour quelle matière ?</h2>
+    <div class="tiles">${DATA.subjects.map(s => `<button class="tile" data-m="${s.key}" data-go="scan-${s.key}"><b>${esc(s.name)}</b></button>`).join("")}
+    <button class="tile" data-m="agenda" data-go="scan-agenda"><b>Ton agenda</b><span>carnet, devoirs, emploi du temps</span></button></div></section>`;
   wire();
+}
+// What she can do in a subject. IA & vibe coding has no pages to scan and no school tests.
+function subjectChoices(s) {
+  const c = [];
+  if (s.scan !== false) c.push(["cours", "Scanner un cours", "une leçon, des exercices"], ["controle", "Scanner un contrôle", "un contrôle ou un devoir corrigé"]);
+  c.push(["apprendre", "Apprendre une nouvelle notion", "écris ce que tu veux apprendre"]);
+  if (!NO_TESTS.includes(s.key)) c.push(["prepa", "Préparer un contrôle", "le jour et ce qu'il faut réviser"]);
+  return c;
 }
 function scanStep(rest) {
   const [key, kind] = rest.split("-");
   const s = key === "agenda" ? AGENDA : SUBJ[key];
   if (!s) return scanSubject();
-  setFrame("Scanner · " + s.name, key, true);
-  if (!kind) {
-    app.innerHTML = `<section class="card"><h2>2. Qu'est-ce que tu scannes ?</h2><div class="list">
-      ${Object.entries(kindsOf(key)).map(([k, label]) => `<button class="row" data-go="scan-${key}-${k}"><span class="dot"></span><span class="txt"><span>${label}</span></span></button>`).join("")}
+  if (key !== "agenda" && kind === "apprendre") return learnView(s);
+  if (key !== "agenda" && kind === "prepa" && !NO_TESTS.includes(key)) return prepView(s);
+  const choices = key === "agenda" ? Object.entries(AG_KINDS).map(([k, label]) => [k, label, ""]) : subjectChoices(s);
+  if (!kind || !choices.some(c => c[0] === kind)) {
+    setFrame(key === "agenda" ? "Scanner · " + s.name : s.name, key, true);
+    app.innerHTML = `<section class="card"><h2>${key === "agenda" ? "Qu'est-ce que tu scannes ?" : "Qu'est-ce que tu veux faire ?"}</h2><div class="list">
+      ${choices.map(([k, label, sub]) => `<button class="row" data-go="scan-${key}-${k}"><span class="dot"></span><span class="txt"><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</span><span class="chev" aria-hidden="true">›</span></button>`).join("")}
       </div></section>`;
     return wire();
   }
+  setFrame("Scanner · " + s.name, key, true);
   if (!SCAN || SCAN.key !== key || SCAN.kind !== kind) SCAN = { key, kind, pages: [] };
   scanPhotos(s);
+}
+function learnView(s) {
+  setFrame("Apprendre · " + s.name, s.key, true);
+  if (LEARN.m !== s.key) Object.assign(LEARN, { m: s.key, text: "", sent: false });
+  const asks = DATA.scans.filter(sc => sc.demande && sc.label.startsWith(s.name + " · ")).slice(0, 3);
+  const ok = LEARN.text.trim().length >= 3;
+  const hint = s.key === "mathematiques" ? "Ex. : les médiatrices et la construction au compas" : "Écris le sujet avec tes mots";
+  app.innerHTML = `<section class="card" id="learn" data-m="${s.key}"><h2>Qu'est-ce que tu veux apprendre ?</h2>
+      <textarea id="ltext" maxlength="${LEARN_MAX}" rows="3" placeholder="${hint}">${esc(LEARN.text)}</textarea>
+      <button class="main" id="lsend"${ok ? "" : " disabled"}>${ok ? `Envoyer · ${esc(s.name)}` : "Écris ce que tu veux apprendre"}</button>
+      ${LEARN.sent ? `<p class="sent ok" id="lsent">C'est envoyé : ta fiche et ton quiz arrivent dans un quart d'heure environ.</p>` : ""}
+      ${asks.length ? `<ul class="due">${asks.map(sc => `<li><span class="badge ${askBadge(sc.status)}">${esc(sc.status)}</span>
+        <span>${esc(sc.label)}${sc.note ? `<br><span class="small">${esc(sc.note)}</span>` : ""}</span></li>`).join("")}</ul>` : ""}</section>`;
+  const ta = document.getElementById("ltext"), send = document.getElementById("lsend");
+  ta.oninput = () => { LEARN.text = ta.value; const good = LEARN.text.trim().length >= 3; send.disabled = !good;
+    send.textContent = good ? `Envoyer · ${s.name}` : "Écris ce que tu veux apprendre"; };
+  send.onclick = () => {
+    const text = ta.value.trim().slice(0, LEARN_MAX);
+    if (text.length < 3) return;
+    const id = "l" + Date.now().toString(36);
+    DATA.scans.unshift({ label: learnLabel(s.key, text), demande: true, status: "reçu", note: "En préparation, prêt dans un quart d'heure environ." });
+    store.set("data", JSON.stringify(DATA));
+    queue("askLearn", [id, s.key, text], "learn-" + id);
+    Object.assign(LEARN, { text: "", sent: true });
+    learnView(s);
+  };
+}
+// « Préparer un contrôle »: like on 14/11 (« contrôle de géographie le 17/11 sur les sections 1, 2 et 5 »), she gives
+// the day and what it covers. It goes to her agenda (addAgenda, the same as « + Ajouter un contrôle »), and the cloud
+// job writes its revision quiz on that programme 3 days before (at once when the test is that close or has no day).
+const PREP = { m: null, date: null, title: "", done: null };
+function prepView(s) {
+  setFrame("Préparer un contrôle", s.key, true);
+  if (PREP.m !== s.key) Object.assign(PREP, { m: s.key, date: null, title: "", done: null });
+  if (PREP.done) {
+    const it = PREP.done, soon = !it.date || dayDiff(it.date) <= 3;
+    Object.assign(PREP, { m: null, date: null, title: "", done: null });  // a fresh form next time
+    app.innerHTML = `<section class="card" data-m="${s.key}"><h2>C'est noté</h2>
+        <p style="margin:0 0 8px">Contrôle ${esc(deName(s))}, ${it.date ? dayLabel(it.date) : "date à préciser"}.</p>
+        <p class="sent ok" id="psent">${soon ? "Ton quiz de révision arrive dans un quart d'heure environ." : "Ton quiz de révision arrivera 3 jours avant."}</p></section>
+      <button class="main" data-go="agenda">Voir ton agenda</button>
+      <button class="sec" id="home">Retour à tes révisions</button>`;
+    document.getElementById("home").onclick = () => go("");
+    return wire();
+  }
+  const days = nextDays(), ok = PREP.date !== null;  // "" = she does not know the day yet
+  const coming = agItems().filter(it => it.type === "controle" && it.matiere === s.key && !it.done && (!it.date || dayDiff(it.date) >= 0));
+  app.innerHTML = `${coming.length ? `<section class="card" data-m="${s.key}"><h2>Déjà dans ton agenda</h2><div class="list">
+      ${coming.map(it => `<button class="row" data-go="mod-${it.id}"><span class="dot"></span><span class="txt"><span>${it.date ? dayLabel(it.date) : "Date à préciser"}</span><small>${esc(it.details || it.title)}</small></span><span class="chev" aria-hidden="true">›</span></button>`).join("")}</div>
+      <p class="small">Touche un contrôle pour changer son jour ou ce qu'il faut réviser.</p></section>` : ""}
+    <section class="card" data-m="${s.key}"><h2>1. Quel jour ?</h2>
+      <div class="days">${days.map(d => `<button class="mini${PREP.date === d ? "" : " alt"}" data-day="${d}">${dayLabel(d)}</button>`).join("")}
+        <button class="mini${PREP.date === "" ? "" : " alt"}" data-day="">Je ne sais pas encore</button></div>
+      <label class="small" for="pday">Plus tard :</label> <input type="date" id="pday" min="${TODAY}" value="${PREP.date && !days.includes(PREP.date) ? PREP.date : ""}"></section>
+    <section class="card" data-m="${s.key}"><h2>2. Qu'est-ce qu'il faut réviser ?</h2>
+      <textarea id="ptitle" maxlength="${TITLE_MAX}" rows="4" placeholder="Ex. : les sections 1, 2 et 5 du chapitre 1, pas les parties 3 et 4">${esc(PREP.title)}</textarea>
+      <p class="small">Chapitres, pages, exercices, ce qui n'y sera pas : tout ce que ton prof a dit. Ton quiz de révision sera fait sur ce programme.</p></section>
+    <button class="main" id="padd"${ok ? "" : " disabled"}>${ok ? `Noter le contrôle · ${PREP.date ? dayLabel(PREP.date) : "date à préciser"}` : "Choisis le jour"}</button>`;
+  const keep = () => { PREP.title = document.getElementById("ptitle").value; };
+  app.querySelectorAll("[data-day]").forEach(b => b.onclick = () => { keep(); PREP.date = b.dataset.day; prepView(s); });
+  document.getElementById("pday").onchange = e => { keep(); if (e.target.value >= TODAY) PREP.date = e.target.value; prepView(s); };
+  document.getElementById("padd").onclick = () => {
+    keep();
+    if (PREP.date === null) return;
+    const it = { id: "elle-" + Date.now().toString(36), date: PREP.date, type: "controle", matiere: s.key, title: PREP.title.trim().slice(0, TITLE_MAX) || "Contrôle", by: "elle" };
+    DATA.agenda = DATA.agenda || { items: [] }; DATA.agenda.items = DATA.agenda.items || [];
+    DATA.agenda.items.push(it);
+    store.set("data", JSON.stringify(DATA));
+    queue("addAgenda", [it.id, it.matiere, it.date, it.title], "add-" + it.id);
+    PREP.done = it;
+    prepView(s);
+  };
+  wire();
 }
 function scanPhotos(s) {
   const n = SCAN.pages.length;
