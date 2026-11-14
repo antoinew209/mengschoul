@@ -321,7 +321,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "14/11 13h29";
+const BUILD = "14/11 13h34";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -459,7 +459,7 @@ function home2() {
   const own = order.map(stepOf).filter(Boolean);
   const step = own.find(x => !x.wait) || (own.length ? extra.map(stepOf).filter(Boolean).find(x => !x.wait) || own[0] : null);
   const waits = own.filter(x => x.wait && x !== step);
-  const deName = s => { const n = /^(Allemand|Français|Mathématiques|Sciences|Histoire|Arts plastiques)$/.test(s.name) ? s.name.toLowerCase() : s.name; return (/^[aeiouhéâ]/i.test(n) ? "d'" : "de ") + n; };
+  const deName = s => { const n = /^(Allemand|Français|Mathématiques|Sciences|Histoire|Géographie|Arts plastiques)$/.test(s.name) ? s.name.toLowerCase() : s.name; return (/^[aeiouhéâ]/i.test(n) ? "d'" : "de ") + n; };
   const waitWhat = s => { const q = lastDone(s), v = vacNext(s); return `${q && isListening(QUIZ[q.id]) && testAhead(s) ? "Ta nouvelle écoute" : "Ton prochain quiz"} ${deName(s)} arrive ${v ? dayName(v) : "dans quelques minutes"}`; };
   const tests = agItems().filter(it => it.type === "controle" && testDays(it) >= 0 && (testDays(it) <= 7 || testDays(it) === SOMEDAY)).slice(0, 2);
   const devoirs = agItems().filter(it => it.type === "devoir" && !it.done && dayDiff(it.date) >= -14 && dayDiff(it.date) <= 7);
