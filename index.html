@@ -339,7 +339,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "15/11 15h54";
+const BUILD = "15/11 16h16";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -1131,7 +1131,8 @@ function activityCard() {
   const pctOf = t => t.q ? Math.round(t.ok / t.q * 100) + " %" : "–";
   const zero = () => ({ cours: 0, controles: 0, demandes: 0, agenda: 0, quiz: 0, redo: 0, q: 0, ok: 0 });
   const sum = ds => ds.reduce((t, d) => { Object.keys(t).forEach(k => t[k] += (A[d] || {})[k] || 0); return t; }, zero());
-  const acts = d => { const x = A[d] || {}; return ["quiz", "redo", "cours", "controles", "demandes", "agenda"].reduce((n, k) => n + (x[k] || 0), 0); };
+  // A day counts only with a quiz done or redone (the parent, 15/11: scans and requests alone are not revising).
+  const acts = d => { const x = A[d] || {}; return (x.quiz || 0) + (x.redo || 0); };
   const days = Array.from({ length: 7 }, (_, i) => dayShift(TODAY, i - 6));
   const cur = sum(days), prev = sum(days.map(d => dayShift(d, -7)));
   const active = days.filter(d => acts(d) > 0).length, max = Math.max(1, ...days.map(acts));
@@ -1139,12 +1140,13 @@ function activityCard() {
   const wd = d => new Date(d + "T12:00:00Z").toLocaleDateString("fr-FR", { weekday: "short", timeZone: "UTC" }).replace(".", "");
   const msg = active >= 5 ? "Belle régularité : continue comme ça !"
     : active >= 3 ? "Encore un effort : un quiz par jour, c'est 10 minutes."
-    : `Seulement ${active} jour${active > 1 ? "s" : ""} de révision sur 7 : un petit quiz chaque jour fait toute la différence.`;
-  return `<section class="card" id="activite"><h2 class="chart-h">Tes 7 derniers jours<span>${active}/7 jours actifs</span></h2>
-    <div class="week" role="img" aria-label="Activité des 7 derniers jours">${days.map(d => { const n = acts(d);
+    : !active ? "Aucun quiz depuis 7 jours : un petit quiz chaque jour fait toute la différence."
+    : `Seulement ${active} jour${active > 1 ? "s" : ""} avec un quiz sur 7 : un petit quiz chaque jour fait toute la différence.`;
+  return `<section class="card" id="activite"><h2 class="chart-h">Tes 7 derniers jours<span>${active}/7 jours avec quiz</span></h2>
+    <div class="week" role="img" aria-label="Quiz faits chacun des 7 derniers jours">${days.map(d => { const n = acts(d);
       return `<div class="d${n ? "" : " zero"}"><i>${n}</i><div class="b" style="height:${n ? Math.max(6, Math.round(n / max * 70)) : 3}px"></div></div>`; }).join("")}</div>
     <div class="week-x">${days.map(d => `<span${d === TODAY ? ` class="auj"` : ""}>${d === TODAY ? "auj." : wd(d)}<br>${+d.slice(8)}</span>`).join("")}</div>
-    <p class="small">${msg}</p>
+    <p class="small">Quiz faits ou refaits chaque jour. ${msg}</p>
     <div class="acts"><span></span><span class="h">7 jours</span><span class="h">sem. d'avant</span>
       ${ACT_ROWS.map(([k, label]) => `<span>${label}</span><b data-k="${k}">${cur[k]}</b><span data-p="${k}">${prev[k]}</span>`).join("")}
       <span>Bonnes réponses</span><b data-k="pct">${pctOf(cur)}</b><span data-p="pct">${pctOf(prev)}</span></div>
