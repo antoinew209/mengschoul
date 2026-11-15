@@ -283,6 +283,20 @@ button.main:disabled { opacity: .5; cursor: default; }
 /* Same box as the bars (below the label room), so the line sits exactly at 80 % of a bar's full height. */
 .chart .goal { position: absolute; left: 0; right: 0; top: 18px; bottom: 0; pointer-events: none; }
 .chart .goal::before { content: ""; position: absolute; left: 0; right: 0; bottom: 80%; border-top: 2px dashed var(--muted); opacity: .5; }
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; padding-top: 4px; border-bottom: 2px solid var(--line); padding-bottom: 4px; }
+.week .d { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.week .d i { font-style: normal; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.week .d .b { width: 100%; max-width: 30px; border-radius: 6px 6px 2px 2px; background: var(--ok); }
+.week .d.zero i { color: var(--bad); }
+.week .d.zero .b { background: var(--bad); opacity: .5; }
+.week-x { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-top: -4px; }
+.week-x span { text-align: center; font-size: 12px; color: var(--muted); white-space: nowrap; line-height: 1.25; }
+.week-x span.auj { color: var(--fg); font-weight: 700; }
+.acts { display: grid; grid-template-columns: 1fr auto auto; gap: 7px 14px; align-items: baseline; font-size: 15px; }
+.acts b, .acts span:nth-child(3n) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.acts b { font-size: 17px; }
+.acts span:nth-child(3n) { color: var(--muted); }
+.acts .h { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
 .chart-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .chart-h span { font-family: var(--body); font-weight: 400; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .col { flex: 1; max-width: 56px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; position: relative; }
@@ -325,7 +339,7 @@ const KEY = (() => {
   catch (e) { return m ? m[1] : ""; }
 })();
 let DATA, SUBJ, QUIZ, FICHE;
-const BUILD = "14/11 17h08";
+const BUILD = "15/11 15h54";
 const TODAY = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Luxembourg' });
 
 const KEYS = { de: ["ä","ö","ü","ß"], fr: ["é","è","ê","à","â","ç","ù","î","ô","œ"] };
@@ -1105,19 +1119,50 @@ function editTestView(id) {
 }
 let SCAN = null;
 let progTab = null;  // the subject shown on « Tes progrès »
+// « Tes 7 derniers jours » (15/11, the parent: « voir à tout instant le nombre de cours scannés sur les 7 derniers
+// jours, le nombre de quiz réalisés… pour lui montrer qu'elle n'a pas une utilisation assez active »).
+// DATA.activity (Code.gs activity_) = { "yyyy-MM-dd": { cours, controles, demandes, agenda, quiz, redo, q, ok } }; the
+// window is counted from today on her phone, so it stays right on a day nothing was sent.
+const ACT_ROWS = [["quiz", "Quiz faits"], ["redo", "Quiz refaits"], ["q", "Questions répondues"], ["cours", "Cours scannés"], ["controles", "Contrôles scannés"], ["demandes", "Notions demandées"]];
+const dayShift = (d, n) => new Date(Date.parse(d + "T12:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+function activityCard() {
+  const A = DATA.activity;
+  if (!A) return "";  // the server does not send it yet
+  const pctOf = t => t.q ? Math.round(t.ok / t.q * 100) + " %" : "–";
+  const zero = () => ({ cours: 0, controles: 0, demandes: 0, agenda: 0, quiz: 0, redo: 0, q: 0, ok: 0 });
+  const sum = ds => ds.reduce((t, d) => { Object.keys(t).forEach(k => t[k] += (A[d] || {})[k] || 0); return t; }, zero());
+  const acts = d => { const x = A[d] || {}; return ["quiz", "redo", "cours", "controles", "demandes", "agenda"].reduce((n, k) => n + (x[k] || 0), 0); };
+  const days = Array.from({ length: 7 }, (_, i) => dayShift(TODAY, i - 6));
+  const cur = sum(days), prev = sum(days.map(d => dayShift(d, -7)));
+  const active = days.filter(d => acts(d) > 0).length, max = Math.max(1, ...days.map(acts));
+  const waiting = DATA.subjects.reduce((n, s) => n + s.quizzes.filter(q => !q.score).length, 0);
+  const wd = d => new Date(d + "T12:00:00Z").toLocaleDateString("fr-FR", { weekday: "short", timeZone: "UTC" }).replace(".", "");
+  const msg = active >= 5 ? "Belle régularité : continue comme ça !"
+    : active >= 3 ? "Encore un effort : un quiz par jour, c'est 10 minutes."
+    : `Seulement ${active} jour${active > 1 ? "s" : ""} de révision sur 7 : un petit quiz chaque jour fait toute la différence.`;
+  return `<section class="card" id="activite"><h2 class="chart-h">Tes 7 derniers jours<span>${active}/7 jours actifs</span></h2>
+    <div class="week" role="img" aria-label="Activité des 7 derniers jours">${days.map(d => { const n = acts(d);
+      return `<div class="d${n ? "" : " zero"}"><i>${n}</i><div class="b" style="height:${n ? Math.max(6, Math.round(n / max * 70)) : 3}px"></div></div>`; }).join("")}</div>
+    <div class="week-x">${days.map(d => `<span${d === TODAY ? ` class="auj"` : ""}>${d === TODAY ? "auj." : wd(d)}<br>${+d.slice(8)}</span>`).join("")}</div>
+    <p class="small">${msg}</p>
+    <div class="acts"><span></span><span class="h">7 jours</span><span class="h">sem. d'avant</span>
+      ${ACT_ROWS.map(([k, label]) => `<span>${label}</span><b data-k="${k}">${cur[k]}</b><span data-p="${k}">${prev[k]}</span>`).join("")}
+      <span>Bonnes réponses</span><b data-k="pct">${pctOf(cur)}</b><span data-p="pct">${pctOf(prev)}</span></div>
+    ${waiting ? `<p class="small" id="attente"><b>${waiting} quiz ${waiting > 1 ? "t'attendent" : "t'attend"}</b> dans tes matières.</p>` : ""}</section>`;
+}
 function progress() {
   setFrame("Tes progrès", null, true);
   const done = DATA.subjects.flatMap(s => s.quizzes.filter(q => q.score).map(q => ({ s, q })));
   const themes = DATA.subjects.flatMap(s => s.review);
-  if (!done.length) { app.innerHTML = `<p class="empty">Fais ton premier quiz : tes progrès apparaîtront ici.</p>`; return wire(); }
+  if (!done.length) { app.innerHTML = `${activityCard()}<p class="empty">Fais ton premier quiz : tes progrès apparaîtront ici.</p>`; return wire(); }
   const ok = done.reduce((a, d) => a + d.q.score[0], 0), n = done.reduce((a, d) => a + d.q.score[1], 0);
   const acquis = themes.filter(r => r.status === "acquis").length;
   const pct = sc => Math.round(sc[0] / sc[1] * 100);
   const bar = r => r.level >= 3 ? "var(--ok)" : r.level >= 1 ? "var(--gold)" : "var(--bad)";
   const tabs = DATA.subjects.filter(s => s.quizzes.some(q => q.score));
   const tab = tabs.find(s => s.key === progTab) || tabs[0];
-  app.innerHTML = `<div class="stats">
-      <div class="stat"><b>${done.length}</b><span>quiz faits</span></div>
+  app.innerHTML = `${activityCard()}<div class="stats">
+      <div class="stat"><b>${done.length}</b><span>quiz faits en tout</span></div>
       <div class="stat"><b>${Math.round(ok / n * 100)} %</b><span>de bonnes réponses</span></div>
       <div class="stat"><b>${acquis}/${themes.length}</b><span>notions acquises</span></div>
     </div>
